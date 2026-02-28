@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Pencil, KeyRound } from 'lucide-react'
+import { Plus, Pencil, KeyRound, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -14,13 +14,18 @@ import { Table } from '@/components/ui/Table'
 import { Badge } from '@/components/ui/Badge'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { TableSkeleton } from '@/components/ui/Skeleton'
+import { SearchInput } from '@/components/ui/SearchInput'
+import { Pagination } from '@/components/ui/Pagination'
 import type { Teacher, Class } from '@/types'
+
+const PAGE_SIZE = 10
 
 const teacherSchema = z.object({
   full_name:       z.string().min(1, 'Full name is required'),
   phone:           z.string().optional(),
   email:           z.string().email('Invalid email').optional().or(z.literal('')),
   employee_number: z.string().optional(),
+  gender:          z.enum(['male', 'female', 'other', '']).optional(),
 })
 type TeacherForm = z.infer<typeof teacherSchema>
 
@@ -38,25 +43,47 @@ interface TeacherWithUser extends Teacher {
 
 export default function TeachersPage() {
   const { isAdmin } = useRole()
-  const [teachers,    setTeachers]    = useState<TeacherWithUser[]>([])
-  const [classes,     setClasses]     = useState<Class[]>([])
-  const [loading,     setLoading]     = useState(true)
-  const [modal,       setModal]       = useState(false)
-  const [editing,     setEditing]     = useState<Teacher | null>(null)
-  const [loginModal,  setLoginModal]  = useState<TeacherWithUser | null>(null)
-  const [loginSaving, setLoginSaving] = useState(false)
+  const [teachers,     setTeachers]     = useState<TeacherWithUser[]>([])
+  const [classes,      setClasses]      = useState<Class[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [search,       setSearch]       = useState('')
+  const [genderFilter, setGenderFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [page,         setPage]         = useState(1)
+  const [total,        setTotal]        = useState(0)
+  const [modal,        setModal]        = useState(false)
+  const [editing,      setEditing]      = useState<Teacher | null>(null)
+  const [loginModal,   setLoginModal]   = useState<TeacherWithUser | null>(null)
+  const [loginSaving,  setLoginSaving]  = useState(false)
   const supabase = createClient()
 
   const load = useCallback(async () => {
     setLoading(true)
-    const [{ data: tData }, { data: cData }] = await Promise.all([
-      supabase.from('teachers').select('*').order('full_name'),
+    let query = supabase
+      .from('teachers')
+      .select('*', { count: 'exact' })
+      .order('full_name')
+      .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
+
+    if (search)       query = query.ilike('full_name', `%${search}%`)
+    if (genderFilter) query = query.eq('gender', genderFilter)
+    if (statusFilter === 'active')   query = query.eq('is_active', true)
+    if (statusFilter === 'inactive') query = query.eq('is_active', false)
+
+    const [{ data: tData, count }, { data: cData }] = await Promise.all([
+      query,
       supabase.from('classes').select('*').order('name'),
     ])
     setTeachers((tData ?? []) as TeacherWithUser[])
+    setTotal(count ?? 0)
     setClasses(cData ?? [])
     setLoading(false)
-  }, [supabase])
+  }, [supabase, search, genderFilter, statusFilter, page])
+
+  function clearFilters() {
+    setSearch(''); setGenderFilter(''); setStatusFilter(''); setPage(1)
+  }
+  const hasFilters = search || genderFilter || statusFilter
 
   useEffect(() => { load() }, [load])
 
@@ -67,13 +94,13 @@ export default function TeachersPage() {
 
   function openAdd() {
     setEditing(null)
-    reset({ full_name: '', phone: '', email: '', employee_number: '' })
+    reset({ full_name: '', phone: '', email: '', employee_number: '', gender: '' })
     setModal(true)
   }
 
   function openEdit(t: Teacher) {
     setEditing(t)
-    reset({ full_name: t.full_name, phone: t.phone ?? '', email: t.email ?? '', employee_number: t.employee_number ?? '' })
+    reset({ full_name: t.full_name, phone: t.phone ?? '', email: t.email ?? '', employee_number: t.employee_number ?? '', gender: (t.gender as 'male' | 'female' | 'other' | '') ?? '' })
     setModal(true)
   }
 
@@ -88,6 +115,7 @@ export default function TeachersPage() {
       phone:           values.phone || null,
       email:           values.email || null,
       employee_number: values.employee_number || null,
+      gender:          values.gender || null,
     }
     if (editing) {
       const { error } = await supabase.from('teachers').update(payload).eq('id', editing.id)
@@ -139,11 +167,46 @@ export default function TeachersPage() {
         action={isAdmin ? <Button icon={<Plus size={16} />} onClick={openAdd}>Add Teacher</Button> : undefined}
       />
 
+      <div className="card p-4 flex flex-wrap gap-3 items-end">
+        <div className="flex-1 min-w-[180px]">
+          <SearchInput
+            placeholder="Search by name…"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+          />
+        </div>
+        <select
+          className="input max-w-[150px]"
+          value={genderFilter}
+          onChange={(e) => { setGenderFilter(e.target.value); setPage(1) }}
+        >
+          <option value="">All Genders</option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+          <option value="other">Other</option>
+        </select>
+        <select
+          className="input max-w-[150px]"
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
+        >
+          <option value="">All Statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        {hasFilters && (
+          <button onClick={clearFilters} className="btn-ghost flex items-center gap-1 text-sm px-3 py-2">
+            <X size={14} /> Clear
+          </button>
+        )}
+      </div>
+
       <div className="card overflow-hidden">
         <Table>
           <thead>
             <tr>
               <th>Name</th>
+              <th>Gender</th>
               <th>Phone</th>
               <th>Email</th>
               <th>Employee No.</th>
@@ -155,15 +218,16 @@ export default function TeachersPage() {
           </thead>
           <tbody>
             {loading ? (
-              <TableSkeleton rows={5} cols={isAdmin ? 8 : 6} />
+              <TableSkeleton rows={5} cols={isAdmin ? 9 : 7} />
             ) : teachers.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 8 : 6}>
-                <EmptyState icon={<span>👨‍🏫</span>} title="No teachers yet" action={isAdmin ? <Button variant="secondary" size="sm" onClick={openAdd}>Add Teacher</Button> : undefined} />
+              <tr><td colSpan={isAdmin ? 9 : 7}>
+                <EmptyState icon={<span>👨‍🏫</span>} title="No teachers found" action={isAdmin ? <Button variant="secondary" size="sm" onClick={openAdd}>Add Teacher</Button> : undefined} />
               </td></tr>
             ) : (
               teachers.map((t) => (
                 <tr key={t.id}>
                   <td className="font-medium">{t.full_name}</td>
+                  <td className="text-gray-500 dark:text-gray-400 capitalize">{t.gender ?? '—'}</td>
                   <td className="text-gray-500 dark:text-gray-400">{t.phone ?? '—'}</td>
                   <td className="text-gray-500 dark:text-gray-400">{t.email ?? '—'}</td>
                   <td className="text-gray-500 dark:text-gray-400">{t.employee_number ?? '—'}</td>
@@ -199,6 +263,7 @@ export default function TeachersPage() {
             )}
           </tbody>
         </Table>
+        <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
       </div>
 
       {/* Add/Edit Teacher Modal */}
@@ -221,6 +286,15 @@ export default function TeachersPage() {
           <div>
             <label className="label">Employee Number</label>
             <input className="input" placeholder="EMP-001" {...register('employee_number')} />
+          </div>
+          <div>
+            <label className="label">Gender</label>
+            <select className="input" {...register('gender')}>
+              <option value="">— Select —</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+            </select>
           </div>
           <div className="flex gap-3 pt-2">
             <Button type="submit" loading={isSubmitting} className="flex-1 justify-center">

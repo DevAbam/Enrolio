@@ -46,11 +46,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to create profile: ' + profileErr.message }, { status: 500 })
   }
 
-  // 3. Link teacher row → user + assign class
-  const update: Record<string, string> = { user_id: authUser.user.id }
-  if (classId) update.class_id = classId
-
-  const { error: linkErr } = await admin.from('teachers').update(update).eq('id', teacherId)
+  // 3. Link teacher row → user + assign class via RPC (bypasses PostgREST schema cache)
+  const { error: linkErr } = await admin.rpc('link_teacher_to_user', {
+    p_teacher_id: teacherId,
+    p_user_id:    authUser.user.id,
+    p_class_id:   classId || null,
+  })
   if (linkErr) {
     return NextResponse.json({ error: 'Account created but failed to link: ' + linkErr.message }, { status: 500 })
   }

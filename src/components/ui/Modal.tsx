@@ -36,7 +36,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={cn('card max-w-md w-full p-6 outline-none', className)}
+        className={cn('card shadow-xl max-w-md w-full p-6 outline-none', className)}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">

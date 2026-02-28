@@ -20,8 +20,25 @@ export interface Student {
 
 export interface Teacher {
   id: string; school_id: string; full_name: string; phone?: string
-  email?: string; employee_number?: string; is_active: boolean
+  email?: string; employee_number?: string; gender?: string; is_active: boolean
+  user_id?: string | null; class_id?: string | null; salary_amount: number
   created_at: string; updated_at: string
+}
+
+export type SalaryPaymentMethod = 'cash' | 'bank_transfer' | 'mobile_money' | 'cheque'
+
+export interface TeacherSalaryPayment {
+  id:             string
+  school_id:      string
+  teacher_id:     string
+  amount_paid:    number
+  payment_date:   string
+  period_label:   string | null
+  payment_method: SalaryPaymentMethod
+  notes:          string | null
+  paid_by:        string | null
+  created_at:     string
+  updated_at:     string
 }
 
 export interface Class {
@@ -57,7 +74,7 @@ export interface SmsLog {
 // View types — these come from the DB views
 export interface StudentFeeSummary {
   id: string; school_id: string; full_name: string; admission_number?: string
-  parent_name?: string; parent_phone?: string; is_active: boolean
+  gender?: string; parent_name?: string; parent_phone?: string; is_active: boolean
   class_id?: string; class_name?: string; term_fee_amount: number
   discount_amount: number; total_owed: number; total_paid: number; outstanding: number
 }

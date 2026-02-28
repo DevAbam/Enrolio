@@ -8,7 +8,7 @@ interface SkeletonProps {
   count?: number
 }
 
-const base = 'animate-pulse bg-green-100 dark:bg-green-900/40'
+const base = 'animate-pulse bg-surface-alt'
 
 function SkeletonItem({ variant = 'line', className }: { variant?: SkeletonVariant; className?: string }) {
   if (variant === 'circle')

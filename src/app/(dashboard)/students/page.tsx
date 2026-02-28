@@ -18,20 +18,21 @@ import { PaymentForm } from '@/components/payments/PaymentForm'
 import { formatCurrency } from '@/lib/utils/currency'
 import type { StudentFeeSummary, Class } from '@/types'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
 
 export default function StudentsPage() {
   const { isAdmin, teacherClassId } = useRole()
-  const [students,  setStudents]  = useState<StudentFeeSummary[]>([])
-  const [classes,   setClasses]   = useState<Class[]>([])
-  const [loading,   setLoading]   = useState(true)
-  const [search,    setSearch]    = useState('')
-  const [classFilter, setClassFilter] = useState('')
+  const [students,     setStudents]     = useState<StudentFeeSummary[]>([])
+  const [classes,      setClasses]      = useState<Class[]>([])
+  const [loading,      setLoading]      = useState(true)
+  const [search,       setSearch]       = useState('')
+  const [classFilter,  setClassFilter]  = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [page,      setPage]      = useState(1)
-  const [total,     setTotal]     = useState(0)
-  const [selected,  setSelected]  = useState<Set<string>>(new Set())
-  const [payModal,  setPayModal]  = useState<StudentFeeSummary | null>(null)
+  const [genderFilter, setGenderFilter] = useState('')
+  const [page,         setPage]         = useState(1)
+  const [total,        setTotal]        = useState(0)
+  const [selected,     setSelected]     = useState<Set<string>>(new Set())
+  const [payModal,     setPayModal]     = useState<StudentFeeSummary | null>(null)
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -42,16 +43,16 @@ export default function StudentsPage() {
       .order('full_name')
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
 
-    if (search)      query = query.ilike('full_name', `%${search}%`)
+    if (search)       query = query.ilike('full_name', `%${search}%`)
+    if (genderFilter) query = query.eq('gender', genderFilter)
     // Teachers are locked to their assigned class
     const effectiveClass = !isAdmin && teacherClassId ? teacherClassId : classFilter
     if (effectiveClass) query = query.eq('class_id', effectiveClass)
     if (isAdmin) {
-      if (statusFilter === 'has_balance')  query = query.gt('outstanding', 0).eq('is_active', true)
-      if (statusFilter === 'fully_paid')   query = query.eq('outstanding', 0).eq('is_active', true)
-      if (statusFilter === 'inactive')     query = query.eq('is_active', false)
+      if (statusFilter === 'has_balance') query = query.gt('outstanding', 0).eq('is_active', true)
+      if (statusFilter === 'fully_paid')  query = query.eq('outstanding', 0).eq('is_active', true)
+      if (statusFilter === 'inactive')    query = query.eq('is_active', false)
     } else {
-      // Teachers only see active students
       query = query.eq('is_active', true)
     }
 
@@ -59,7 +60,7 @@ export default function StudentsPage() {
     if (error) toast.error(error.message)
     else { setStudents(data ?? []); setTotal(count ?? 0) }
     setLoading(false)
-  }, [supabase, search, classFilter, statusFilter, page, isAdmin, teacherClassId])
+  }, [supabase, search, classFilter, statusFilter, genderFilter, page, isAdmin, teacherClassId])
 
   useEffect(() => { load() }, [load])
 
@@ -76,10 +77,10 @@ export default function StudentsPage() {
   }
 
   function clearFilters() {
-    setSearch(''); setClassFilter(''); setStatusFilter(''); setPage(1)
+    setSearch(''); setClassFilter(''); setStatusFilter(''); setGenderFilter(''); setPage(1)
   }
 
-  const hasFilters = search || classFilter || statusFilter
+  const hasFilters = search || classFilter || statusFilter || genderFilter
 
   return (
     <div className="space-y-6">
@@ -103,10 +104,20 @@ export default function StudentsPage() {
               onChange={(e) => { setSearch(e.target.value); setPage(1) }}
             />
           </div>
+          <select
+            className="input max-w-[140px]"
+            value={genderFilter}
+            onChange={(e) => { setGenderFilter(e.target.value); setPage(1) }}
+          >
+            <option value="">All Genders</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+          </select>
           {isAdmin && (
             <>
               <select
-                className="input max-w-[160px]"
+                className="input max-w-[150px]"
                 value={classFilter}
                 onChange={(e) => { setClassFilter(e.target.value); setPage(1) }}
               >
@@ -114,11 +125,11 @@ export default function StudentsPage() {
                 {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
               <select
-                className="input max-w-[160px]"
+                className="input max-w-[150px]"
                 value={statusFilter}
                 onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
               >
-                <option value="">All Students</option>
+                <option value="">All Status</option>
                 <option value="has_balance">Has Balance</option>
                 <option value="fully_paid">Fully Paid</option>
                 <option value="inactive">Inactive</option>
@@ -135,8 +146,8 @@ export default function StudentsPage() {
 
       {/* Bulk action bar — admin only */}
       {isAdmin && selected.size > 0 && (
-        <div className="card p-3 flex items-center justify-between bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700">
-          <span className="text-sm text-green-800 dark:text-green-300 font-medium">
+        <div className="card p-3 flex items-center justify-between bg-surface-alt border border-border">
+          <span className="text-sm text-fg font-medium">
             {selected.size} selected
           </span>
           <Link href={`/sms?tab=selected&ids=${Array.from(selected).join(',')}`}>
@@ -156,7 +167,7 @@ export default function StudentsPage() {
                 <th className="w-10">
                   <input
                     type="checkbox"
-                    className="rounded border-green-300"
+                    className="rounded border-border"
                     checked={selected.size === students.length && students.length > 0}
                     onChange={(e) => {
                       if (e.target.checked) setSelected(new Set(students.map((s) => s.id)))
@@ -198,13 +209,13 @@ export default function StudentsPage() {
                       <td>
                         <input
                           type="checkbox"
-                          className="rounded border-green-300"
+                          className="rounded border-border"
                           checked={selected.has(s.id)}
                           onChange={() => toggleSelect(s.id)}
                         />
                       </td>
                     )}
-                    <td className="text-gray-500 dark:text-gray-400 text-xs">{s.admission_number ?? '—'}</td>
+                    <td className="text-fg-subtle text-xs">{s.admission_number ?? '—'}</td>
                     <td className="font-medium">{s.full_name}</td>
                     <td>
                       {s.class_name

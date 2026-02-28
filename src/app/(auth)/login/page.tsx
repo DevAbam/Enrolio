@@ -31,16 +31,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#0a0f0a] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-bg flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="card p-8">
           {/* Logo */}
           <div className="flex flex-col items-center mb-8">
-            <div className="h-12 w-12 rounded-full bg-green-600 text-white flex items-center justify-center text-xl font-bold mb-3">
+            <div className="h-12 w-12 rounded-full bg-accent text-white flex items-center justify-center text-xl font-bold mb-3">
               S
             </div>
-            <h1 className="text-2xl font-bold text-green-900 dark:text-green-50">Welcome back</h1>
-            <p className="text-sm text-gray-500 mt-1">Sign in to SchoolOps Pro</p>
+            <h1 className="text-2xl font-bold text-fg">Welcome back</h1>
+            <p className="text-sm text-fg-muted mt-1">Sign in to SchoolOps Pro</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -76,7 +76,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPw(!showPw)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg"
                   tabIndex={-1}
                 >
                   {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -102,9 +102,9 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="mt-4 text-center text-xs text-gray-400">
+          <p className="mt-4 text-center text-xs text-fg-subtle">
             First time?{' '}
-            <a href="/setup" className="text-green-600 hover:underline">
+            <a href="/setup" className="text-accent hover:underline">
               Set up your school
             </a>
           </p>

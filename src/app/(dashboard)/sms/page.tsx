@@ -185,7 +185,7 @@ function SMSPageInner() {
       <PageHeader title="SMS Center" subtitle="Send fee reminders to parents" />
 
       {/* Tab bar */}
-      <div className="border-b border-green-200 dark:border-green-800">
+      <div className="border-b border-border">
         <div className="flex gap-0">
           {tabs.map(({ key, label }) => (
             <button
@@ -194,8 +194,8 @@ function SMSPageInner() {
               className={cn(
                 'px-4 py-3 text-sm font-medium transition-colors border-b-2',
                 tab === key
-                  ? 'border-green-600 text-green-700 dark:text-green-400'
-                  : 'border-transparent text-gray-500 hover:text-green-700 dark:hover:text-green-400'
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-fg-muted hover:text-fg'
               )}
             >
               {label}
@@ -217,7 +217,7 @@ function SMSPageInner() {
               {filteredStudents.slice(0, 8).map((s) => (
                 <button
                   key={s.id}
-                  className="w-full text-left px-4 py-3 hover:bg-green-50 dark:hover:bg-green-900/20 border-b border-green-100 dark:border-green-800/50 last:border-b-0"
+                  className="w-full text-left px-4 py-3 hover:bg-surface-alt border-b border-border last:border-b-0"
                   onClick={() => {
                     setSingleStudent(s)
                     setSearch('')
@@ -336,7 +336,7 @@ function SMSPageInner() {
         <div className="space-y-4 max-w-lg">
           <div className="card p-4 flex items-start gap-3">
             <AlertTriangle size={18} className="text-yellow-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-green-800 dark:text-green-300">
+            <p className="text-sm text-fg">
               <strong>{defaulters.length} student{defaulters.length !== 1 ? 's' : ''}</strong> currently have outstanding fees.
               {defaulters.filter((s) => !s.parent_phone).length > 0 && (
                 <span className="text-yellow-600 dark:text-yellow-400">
@@ -348,7 +348,7 @@ function SMSPageInner() {
 
           <div>
             <label className="label">Message Preview (per-student values inserted automatically)</label>
-            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 text-sm italic border border-green-200 dark:border-green-700 text-green-800 dark:text-green-300">
+            <div className="bg-surface-alt rounded-lg p-3 text-sm italic border border-border text-fg">
               {bulkMessage || 'Loading preview…'}
             </div>
           </div>
@@ -365,14 +365,14 @@ function SMSPageInner() {
 
       {/* SMS Log */}
       <div className="card overflow-hidden">
-        <div className="px-5 py-4 border-b border-green-100 dark:border-green-800">
+        <div className="px-5 py-4 border-b border-border">
           <h2 className="section-title flex items-center gap-2">
             <MessageSquare size={18} />
             Recent SMS Activity
           </h2>
         </div>
         {smsLogs.length === 0 ? (
-          <EmptyState icon={<MessageSquare size={48} className="text-green-300 dark:text-green-700" />} title="No SMS sent yet" description="Send your first message above" />
+          <EmptyState icon={<MessageSquare size={48} className="text-fg-subtle" />} title="No SMS sent yet" description="Send your first message above" />
         ) : (
           <Table>
             <thead>
@@ -387,7 +387,7 @@ function SMSPageInner() {
             <tbody>
               {smsLogs.map((log) => (
                 <tr key={log.id}>
-                  <td className="text-xs text-gray-500">{formatDate(log.sent_at)}</td>
+                  <td className="text-xs text-fg-subtle">{formatDate(log.sent_at)}</td>
                   <td className="text-sm">{log.parent_phone}</td>
                   <td><Badge variant="gray">{log.sms_type}</Badge></td>
                   <td><Badge variant={log.status === 'success' ? 'green' : log.status === 'failed' ? 'red' : 'yellow'}>{log.status}</Badge></td>
@@ -402,13 +402,13 @@ function SMSPageInner() {
       {/* Confirm Modal */}
       <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Confirm Bulk SMS">
         <div className="space-y-4">
-          <p className="text-sm text-green-800 dark:text-green-300">
+          <p className="text-sm text-fg">
             You are about to send <strong>{confirmCount} SMS message{confirmCount !== 1 ? 's' : ''}</strong>.
           </p>
-          <div className="bg-green-50 dark:bg-[#111b11] rounded-lg p-3 text-sm border border-green-200 dark:border-green-700 italic text-green-800 dark:text-green-300">
+          <div className="bg-surface-alt rounded-lg p-3 text-sm border border-border italic text-fg">
             {tab === 'selected' ? message : bulkMessage}
           </div>
-          <p className="text-sm text-gray-500">This action cannot be undone.</p>
+          <p className="text-sm text-fg-muted">This action cannot be undone.</p>
           <div className="flex gap-3">
             <Button loading={sending} onClick={handleBulkSend} className="flex-1 justify-center" icon={<Send size={14} />}>
               Send Now

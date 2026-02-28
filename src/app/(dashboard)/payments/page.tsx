@@ -15,7 +15,7 @@ import { formatCurrency } from '@/lib/utils/currency'
 import { formatDate, today } from '@/lib/utils/date'
 import type { Payment } from '@/types'
 
-const PAGE_SIZE = 20
+const PAGE_SIZE = 10
 
 interface PaymentWithStudent extends Payment {
   students?: { full_name: string; classes?: { name: string } | null } | null
@@ -108,10 +108,10 @@ export default function PaymentsPage() {
                 <tr key={p.id}>
                   <td className="text-sm">{formatDate(p.payment_date)}</td>
                   <td className="font-medium">{p.students?.full_name ?? '—'}</td>
-                  <td className="font-medium text-green-700 dark:text-green-400">{formatCurrency(Number(p.amount_paid))}</td>
-                  <td className="capitalize text-gray-500 text-sm">{p.payment_method?.replace('_', ' ') ?? '—'}</td>
-                  <td className="text-gray-500 text-xs">{p.receipt_number ?? '—'}</td>
-                  <td className="text-gray-500 text-sm max-w-xs truncate">{p.notes ?? '—'}</td>
+                  <td className="font-medium text-accent-fg">{formatCurrency(Number(p.amount_paid))}</td>
+                  <td className="capitalize text-fg-muted text-sm">{p.payment_method?.replace('_', ' ') ?? '—'}</td>
+                  <td className="text-fg-muted text-xs">{p.receipt_number ?? '—'}</td>
+                  <td className="text-fg-muted text-sm max-w-xs truncate">{p.notes ?? '—'}</td>
                   <td>
                     <button
                       className="btn-ghost p-1.5 rounded"

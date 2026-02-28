@@ -15,10 +15,10 @@ export function Pagination({ page, pageSize, total, onPageChange }: PaginationPr
   if (total === 0) return null
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-t border-green-100 dark:border-green-800/50">
-      <p className="text-sm text-gray-500 dark:text-gray-400">
-        Showing <span className="font-medium text-green-800 dark:text-green-300">{from}–{to}</span>{' '}
-        of <span className="font-medium text-green-800 dark:text-green-300">{total}</span>
+    <div className="flex items-center justify-between px-4 py-3">
+      <p className="text-sm text-fg-subtle">
+        Showing <span className="font-medium text-fg">{from}–{to}</span>{' '}
+        of <span className="font-medium text-fg">{total}</span>
       </p>
       <div className="flex items-center gap-2">
         <button

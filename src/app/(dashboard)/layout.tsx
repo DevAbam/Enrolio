@@ -10,8 +10,9 @@ const pageTitles: Record<string, string> = {
   '/students':            'Students',
   '/students/new':        'Add Student',
   '/teachers':            'Teachers',
+  '/teachers/salaries':   'Teacher Salaries',
   '/classes':             'Classes',
-  '/payments':            'Payments',
+  '/payments':            'Fee Payments',
   '/attendance/students': 'Student Attendance',
   '/attendance/teachers': 'Teacher Attendance',
   '/sms':                 'SMS Center',
@@ -48,7 +49,7 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
           userInitials={getInitials(fullName)}
           onMenuClick={() => setMobileOpen(true)}
         />
-        <main className="flex-1 overflow-y-auto bg-white dark:bg-[#0a0f0a] p-6 no-print">
+        <main className="flex-1 overflow-y-auto bg-bg p-6 print:overflow-visible print:p-0">
           <div className="max-w-7xl mx-auto w-full space-y-6">
             {children}
           </div>

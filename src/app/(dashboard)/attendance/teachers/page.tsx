@@ -20,7 +20,7 @@ interface AttendanceRecord {
 }
 
 const statuses: { value: AttendanceStatus; label: string; activeClass: string }[] = [
-  { value: 'present', label: 'Present',  activeClass: 'bg-green-600 text-white border-green-600' },
+  { value: 'present', label: 'Present',  activeClass: 'bg-accent text-white border-accent' },
   { value: 'absent',  label: 'Absent',   activeClass: 'bg-red-600 text-white border-red-600' },
   { value: 'late',    label: 'Late',     activeClass: 'bg-yellow-500 text-white border-yellow-500' },
   { value: 'excused', label: 'Excused',  activeClass: 'bg-gray-500 text-white border-gray-500' },
@@ -206,7 +206,7 @@ export default function TeacherAttendancePage() {
                                 'px-3 py-1 text-xs rounded border font-medium transition-colors',
                                 rec?.status === value
                                   ? activeClass
-                                  : 'border-green-200 dark:border-green-700 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/30'
+                                  : 'border-border text-fg-muted hover:bg-surface-alt'
                               )}
                             >
                               {label}
@@ -216,7 +216,7 @@ export default function TeacherAttendancePage() {
                       ) : (
                         <span className={cn(
                           'px-3 py-1 text-xs rounded border font-medium',
-                          rec?.status === 'present' ? 'bg-green-600 text-white border-green-600' :
+                          rec?.status === 'present' ? 'bg-accent text-white border-accent' :
                           rec?.status === 'absent'  ? 'bg-red-600 text-white border-red-600' :
                           rec?.status === 'late'    ? 'bg-yellow-500 text-white border-yellow-500' :
                           'bg-gray-500 text-white border-gray-500'

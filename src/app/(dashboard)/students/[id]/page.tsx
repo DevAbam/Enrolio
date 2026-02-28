@@ -126,7 +126,7 @@ export default function StudentDetailPage() {
         {/* Left — Student Info */}
         <div className="card p-5">
           <div className="flex items-start justify-between mb-4">
-            <h2 className="text-xl font-bold text-green-900 dark:text-green-50">{student.full_name}</h2>
+            <h2 className="text-xl font-bold text-fg">{student.full_name}</h2>
             {isAdmin && (
               <Button variant="secondary" size="sm" icon={<Pencil size={14} />} onClick={() => setEditModal(true)}>
                 Edit
@@ -148,9 +148,9 @@ export default function StudentDetailPage() {
             </div>
           </dl>
 
-          <div className="border-t border-green-100 dark:border-green-800 my-4" />
+          <div className="border-t border-border my-4" />
 
-          <h3 className="text-sm font-semibold text-green-800 dark:text-green-300 mb-3">Parent / Guardian</h3>
+          <h3 className="text-sm font-semibold text-fg mb-3">Parent / Guardian</h3>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between">
               <dt className="text-gray-500">Name</dt>
@@ -174,7 +174,7 @@ export default function StudentDetailPage() {
             {Number(student.discount_amount) > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-500">Discount</span>
-                <span className="font-semibold text-green-600">-{formatCurrency(Number(student.discount_amount))}</span>
+                <span className="font-semibold text-accent-fg">-{formatCurrency(Number(student.discount_amount))}</span>
               </div>
             )}
             <div className="flex justify-between">
@@ -183,11 +183,11 @@ export default function StudentDetailPage() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Total Paid</span>
-              <span className="font-semibold text-green-600">{formatCurrency(Number(student.total_paid))}</span>
+              <span className="font-semibold text-accent-fg">{formatCurrency(Number(student.total_paid))}</span>
             </div>
           </div>
 
-          <div className="border-t border-green-100 dark:border-green-800 my-4" />
+          <div className="border-t border-border my-4" />
 
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-500">Outstanding</span>
@@ -214,7 +214,7 @@ export default function StudentDetailPage() {
 
       {/* Payment History */}
       <div className="card overflow-hidden">
-        <div className="px-5 py-4 border-b border-green-100 dark:border-green-800">
+        <div className="px-5 py-4 border-b border-border">
           <h2 className="section-title">Payment History</h2>
         </div>
         <Table>
@@ -237,10 +237,10 @@ export default function StudentDetailPage() {
               payments.map((p) => (
                 <tr key={p.id}>
                   <td>{formatDate(p.payment_date)}</td>
-                  <td className="font-medium text-green-700 dark:text-green-400">{formatCurrency(Number(p.amount_paid))}</td>
-                  <td className="capitalize text-gray-500">{p.payment_method?.replace('_', ' ') ?? '—'}</td>
-                  <td className="text-gray-500 text-xs">{p.receipt_number ?? '—'}</td>
-                  <td className="text-gray-500 max-w-xs truncate">{p.notes ?? '—'}</td>
+                  <td className="font-medium text-accent-fg">{formatCurrency(Number(p.amount_paid))}</td>
+                  <td className="capitalize text-fg-muted">{p.payment_method?.replace('_', ' ') ?? '—'}</td>
+                  <td className="text-fg-muted text-xs">{p.receipt_number ?? '—'}</td>
+                  <td className="text-fg-muted max-w-xs truncate">{p.notes ?? '—'}</td>
                   <td>
                     <button
                       className="btn-ghost p-1.5 rounded"

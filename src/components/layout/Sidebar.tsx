@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, Users, UserCheck, BookOpen,
-  CreditCard, ClipboardList, MessageSquare, GraduationCap, X, LogOut, Banknote
+  CreditCard, ClipboardList, MessageSquare, GraduationCap, X, LogOut, Banknote, CalendarDays
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
 import { createClient } from '@/lib/supabase/client'
@@ -34,6 +34,7 @@ const allNavSections: { label: string; items: NavItem[] }[] = [
       { href: '/students', label: 'Students', icon: GraduationCap, roles: ['admin', 'accountant', 'teacher'], exact: false },
       { href: '/teachers', label: 'Teachers', icon: Users, roles: ['admin'], exact: true },
       { href: '/classes', label: 'Classes', icon: BookOpen, roles: ['admin', 'accountant'], exact: false },
+      { href: '/terms', label: 'Terms', icon: CalendarDays, roles: ['admin'], exact: false },
     ],
   },
   {

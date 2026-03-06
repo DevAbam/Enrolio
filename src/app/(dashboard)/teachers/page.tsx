@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Pencil, KeyRound, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Plus, Pencil, KeyRound, X, Lock, Power } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -26,6 +27,7 @@ const teacherSchema = z.object({
   email:           z.string().email('Invalid email').optional().or(z.literal('')),
   employee_number: z.string().optional(),
   gender:          z.enum(['male', 'female', 'other', '']).optional(),
+  class_id:        z.string().optional(),
 })
 type TeacherForm = z.infer<typeof teacherSchema>
 
@@ -36,6 +38,11 @@ const loginSchema = z.object({
 })
 type LoginForm = z.infer<typeof loginSchema>
 
+const pwSchema = z.object({
+  newPassword: z.string().min(6, 'Min 6 characters'),
+})
+type PwForm = z.infer<typeof pwSchema>
+
 interface TeacherWithUser extends Teacher {
   user_id:  string | null
   class_id: string | null
@@ -43,6 +50,7 @@ interface TeacherWithUser extends Teacher {
 
 export default function TeachersPage() {
   const { isAdmin } = useRole()
+  const router      = useRouter()
   const [teachers,     setTeachers]     = useState<TeacherWithUser[]>([])
   const [classes,      setClasses]      = useState<Class[]>([])
   const [loading,      setLoading]      = useState(true)
@@ -55,6 +63,7 @@ export default function TeachersPage() {
   const [editing,      setEditing]      = useState<Teacher | null>(null)
   const [loginModal,   setLoginModal]   = useState<TeacherWithUser | null>(null)
   const [loginSaving,  setLoginSaving]  = useState(false)
+  const [pwModal,      setPwModal]      = useState<TeacherWithUser | null>(null)
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -91,22 +100,28 @@ export default function TeachersPage() {
     resolver: zodResolver(teacherSchema),
   })
   const loginForm = useForm<LoginForm>({ resolver: zodResolver(loginSchema) })
+  const pwForm    = useForm<PwForm>({ resolver: zodResolver(pwSchema) })
 
   function openAdd() {
     setEditing(null)
-    reset({ full_name: '', phone: '', email: '', employee_number: '', gender: '' })
+    reset({ full_name: '', phone: '', email: '', employee_number: '', gender: '', class_id: '' })
     setModal(true)
   }
 
-  function openEdit(t: Teacher) {
+  function openEdit(t: TeacherWithUser) {
     setEditing(t)
-    reset({ full_name: t.full_name, phone: t.phone ?? '', email: t.email ?? '', employee_number: t.employee_number ?? '', gender: (t.gender as 'male' | 'female' | 'other' | '') ?? '' })
+    reset({ full_name: t.full_name, phone: t.phone ?? '', email: t.email ?? '', employee_number: t.employee_number ?? '', gender: (t.gender as 'male' | 'female' | 'other' | '') ?? '', class_id: t.class_id ?? '' })
     setModal(true)
   }
 
   function openLogin(t: TeacherWithUser) {
     loginForm.reset({ email: t.email ?? '', password: '', classId: t.class_id ?? '' })
     setLoginModal(t)
+  }
+
+  function openPw(t: TeacherWithUser) {
+    pwForm.reset({ newPassword: '' })
+    setPwModal(t)
   }
 
   async function onSubmit(values: TeacherForm) {
@@ -116,6 +131,7 @@ export default function TeachersPage() {
       email:           values.email || null,
       employee_number: values.employee_number || null,
       gender:          values.gender || null,
+      class_id:        values.class_id || null,
     }
     if (editing) {
       const { error } = await supabase.from('teachers').update(payload).eq('id', editing.id)
@@ -148,9 +164,25 @@ export default function TeachersPage() {
     })
     const data = await res.json()
     if (!res.ok) { toast.error(data.error); setLoginSaving(false); return }
+    // Store temp password
+    await supabase.from('teachers').update({ temp_password: values.password }).eq('id', loginModal.id)
     toast.success(`Login created for ${loginModal.full_name}`)
     setLoginModal(null)
     setLoginSaving(false)
+    load()
+  }
+
+  async function onChangePassword(values: PwForm) {
+    if (!pwModal) return
+    const res = await fetch('/api/teacher-account/change-password', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ teacherId: pwModal.id, userId: pwModal.user_id, newPassword: values.newPassword }),
+    })
+    const data = await res.json()
+    if (!res.ok) { toast.error(data.error); return }
+    toast.success('Password updated')
+    setPwModal(null)
     load()
   }
 
@@ -225,7 +257,11 @@ export default function TeachersPage() {
               </td></tr>
             ) : (
               teachers.map((t) => (
-                <tr key={t.id}>
+                <tr
+                  key={t.id}
+                  className="cursor-pointer hover:bg-surface-alt transition-colors"
+                  onClick={() => router.push(`/teachers/${t.id}`)}
+                >
                   <td className="font-medium">{t.full_name}</td>
                   <td className="text-gray-500 dark:text-gray-400 capitalize">{t.gender ?? '—'}</td>
                   <td className="text-gray-500 dark:text-gray-400">{t.phone ?? '—'}</td>
@@ -235,12 +271,10 @@ export default function TeachersPage() {
                     {classes.find((c) => c.id === t.class_id)?.name ?? '—'}
                   </td>
                   <td>
-                    <button onClick={() => isAdmin && toggleActive(t)}>
-                      <Badge variant={t.is_active ? 'green' : 'gray'}>{t.is_active ? 'Active' : 'Inactive'}</Badge>
-                    </button>
+                    <Badge variant={t.is_active ? 'green' : 'gray'}>{t.is_active ? 'Active' : 'Inactive'}</Badge>
                   </td>
                   {isAdmin && (
-                    <td>
+                    <td onClick={e => e.stopPropagation()}>
                       {t.user_id
                         ? <Badge variant="green">Has Login</Badge>
                         : (
@@ -252,10 +286,24 @@ export default function TeachersPage() {
                     </td>
                   )}
                   {isAdmin && (
-                    <td>
-                      <button onClick={() => openEdit(t)} className="btn-ghost p-2 rounded-lg">
-                        <Pencil size={15} />
-                      </button>
+                    <td onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => openEdit(t)} className="btn-ghost p-2 rounded-lg" title="Edit">
+                          <Pencil size={15} />
+                        </button>
+                        {t.user_id && (
+                          <button onClick={() => openPw(t)} className="btn-ghost p-2 rounded-lg" title="Change password">
+                            <Lock size={15} />
+                          </button>
+                        )}
+                        <button
+                          className="btn-ghost p-2 rounded-lg"
+                          title={t.is_active ? 'Deactivate' : 'Activate'}
+                          onClick={() => toggleActive(t)}
+                        >
+                          <Power size={15} className={!t.is_active ? 'text-accent' : ''} />
+                        </button>
+                      </div>
                     </td>
                   )}
                 </tr>
@@ -296,6 +344,15 @@ export default function TeachersPage() {
               <option value="other">Other</option>
             </select>
           </div>
+          {editing && (
+            <div>
+              <label className="label">Assigned Class</label>
+              <select className="input" {...register('class_id')}>
+                <option value="">— No class —</option>
+                {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="flex gap-3 pt-2">
             <Button type="submit" loading={isSubmitting} className="flex-1 justify-center">
               {editing ? 'Save Changes' : 'Add Teacher'}
@@ -333,6 +390,24 @@ export default function TeachersPage() {
               Create Login
             </Button>
             <Button type="button" variant="ghost" onClick={() => setLoginModal(null)}>Cancel</Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Change Password Modal */}
+      <Modal open={!!pwModal} onClose={() => setPwModal(null)} title={`Change Password — ${pwModal?.full_name}`}>
+        <form onSubmit={pwForm.handleSubmit(onChangePassword)} className="space-y-4">
+          <p className="text-sm text-fg-muted">Set a new login password for this teacher.</p>
+          <div>
+            <label className="label">New Password *</label>
+            <input type="text" className="input" placeholder="Min 6 characters" {...pwForm.register('newPassword')} />
+            {pwForm.formState.errors.newPassword && <p className="field-error">{pwForm.formState.errors.newPassword.message}</p>}
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button type="submit" loading={pwForm.formState.isSubmitting} icon={<Lock size={14} />} className="flex-1 justify-center">
+              Update Password
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setPwModal(null)}>Cancel</Button>
           </div>
         </form>
       </Modal>

@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Plus, Eye, MessageSquare, Pencil, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Plus, MessageSquare, Pencil, X, Power } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { useRole } from '@/contexts/RoleContext'
@@ -22,6 +23,7 @@ const PAGE_SIZE = 10
 
 export default function StudentsPage() {
   const { isAdmin, teacherClassId } = useRole()
+  const router = useRouter()
   const [students,     setStudents]     = useState<StudentFeeSummary[]>([])
   const [classes,      setClasses]      = useState<Class[]>([])
   const [loading,      setLoading]      = useState(true)
@@ -43,9 +45,8 @@ export default function StudentsPage() {
       .order('full_name')
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
 
-    if (search)       query = query.ilike('full_name', `%${search}%`)
+    if (search)       query = query.or(`full_name.ilike.%${search}%,admission_number.ilike.%${search}%`)
     if (genderFilter) query = query.eq('gender', genderFilter)
-    // Teachers are locked to their assigned class
     const effectiveClass = !isAdmin && teacherClassId ? teacherClassId : classFilter
     if (effectiveClass) query = query.eq('class_id', effectiveClass)
     if (isAdmin) {
@@ -80,6 +81,12 @@ export default function StudentsPage() {
     setSearch(''); setClassFilter(''); setStatusFilter(''); setGenderFilter(''); setPage(1)
   }
 
+  async function toggleActive(s: StudentFeeSummary) {
+    const { error } = await supabase.from('students').update({ is_active: !s.is_active }).eq('id', s.id)
+    if (error) { toast.error(error.message); return }
+    setStudents(prev => prev.map(st => st.id === s.id ? { ...st, is_active: !st.is_active } : st))
+  }
+
   const hasFilters = search || classFilter || statusFilter || genderFilter
 
   return (
@@ -94,7 +101,6 @@ export default function StudentsPage() {
         ) : undefined}
       />
 
-      {/* Filter bar */}
       <div className="card p-4">
         <div className="flex gap-3 flex-wrap items-center">
           <div className="flex-1 min-w-[200px]">
@@ -144,21 +150,15 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      {/* Bulk action bar — admin only */}
       {isAdmin && selected.size > 0 && (
         <div className="card p-3 flex items-center justify-between bg-surface-alt border border-border">
-          <span className="text-sm text-fg font-medium">
-            {selected.size} selected
-          </span>
+          <span className="text-sm text-fg font-medium">{selected.size} selected</span>
           <Link href={`/sms?tab=selected&ids=${Array.from(selected).join(',')}`}>
-            <Button variant="secondary" size="sm" icon={<MessageSquare size={14} />}>
-              Send SMS to Selected
-            </Button>
+            <Button variant="secondary" size="sm" icon={<MessageSquare size={14} />}>Send SMS to Selected</Button>
           </Link>
         </div>
       )}
 
-      {/* Table */}
       <div className="card overflow-hidden">
         <Table>
           <thead>
@@ -182,7 +182,7 @@ export default function StudentsPage() {
               <th>Parent Phone</th>
               {isAdmin && <th>Outstanding</th>}
               <th>Status</th>
-              <th>Actions</th>
+              {isAdmin && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -204,9 +204,13 @@ export default function StudentsPage() {
               students.map((s) => {
                 const outstanding = Number(s.outstanding)
                 return (
-                  <tr key={s.id}>
+                  <tr
+                    key={s.id}
+                    className="cursor-pointer hover:bg-surface-alt transition-colors"
+                    onClick={() => router.push(`/students/${s.id}`)}
+                  >
                     {isAdmin && (
-                      <td>
+                      <td onClick={e => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           className="rounded border-border"
@@ -239,34 +243,36 @@ export default function StudentsPage() {
                         {s.is_active ? 'Active' : 'Inactive'}
                       </Badge>
                     </td>
-                    <td>
-                      <div className="flex items-center gap-1">
-                        <Link href={`/students/${s.id}`}>
-                          <button className="btn-ghost p-1.5 rounded" title="View"><Eye size={15} /></button>
-                        </Link>
-                        {isAdmin && (
-                          <>
-                            <button
-                              className="btn-ghost p-1.5 rounded"
-                              title="Add payment"
-                              onClick={() => setPayModal(s)}
-                            >
-                              <Plus size={15} />
+                    {isAdmin && (
+                      <td onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <button
+                            className="btn-ghost p-1.5 rounded"
+                            title="Add payment"
+                            onClick={() => setPayModal(s)}
+                          >
+                            <Plus size={15} />
+                          </button>
+                          <Link href={`/sms?tab=single&studentId=${s.id}`}>
+                            <button className="btn-ghost p-1.5 rounded" title="Send SMS">
+                              <MessageSquare size={15} />
                             </button>
-                            <Link href={`/sms?tab=single&studentId=${s.id}`}>
-                              <button className="btn-ghost p-1.5 rounded" title="Send SMS">
-                                <MessageSquare size={15} />
-                              </button>
-                            </Link>
-                            <Link href={`/students/${s.id}?edit=1`}>
-                              <button className="btn-ghost p-1.5 rounded" title="Edit">
-                                <Pencil size={15} />
-                              </button>
-                            </Link>
-                          </>
-                        )}
-                      </div>
-                    </td>
+                          </Link>
+                          <Link href={`/students/${s.id}?edit=1`}>
+                            <button className="btn-ghost p-1.5 rounded" title="Edit">
+                              <Pencil size={15} />
+                            </button>
+                          </Link>
+                          <button
+                            className="btn-ghost p-1.5 rounded"
+                            title={s.is_active ? 'Deactivate' : 'Activate'}
+                            onClick={() => toggleActive(s)}
+                          >
+                            <Power size={15} className={!s.is_active ? 'text-accent' : ''} />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 )
               })
@@ -276,7 +282,6 @@ export default function StudentsPage() {
         <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
       </div>
 
-      {/* Payment Modal */}
       <Modal
         open={!!payModal}
         onClose={() => setPayModal(null)}

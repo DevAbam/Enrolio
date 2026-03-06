@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Pencil, History, CheckCircle, AlertCircle, DollarSign, TrendingUp } from 'lucide-react'
+import { Plus, Pencil, History, CheckCircle, AlertCircle, DollarSign, TrendingUp, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -159,6 +159,46 @@ export default function TeacherSalariesPage() {
     toast.success('Salary updated')
     setSetSalaryModal(null)
     load()
+  }
+
+  // ── Print salary history ───────────────────────────────────────────────────
+  function printSalaryHistory() {
+    if (!historyModal) return
+    const { teacher, payments } = historyModal
+    const total = payments.reduce((s, p) => s + Number(p.amount_paid), 0)
+    const rows = payments.map((p) => `
+      <tr>
+        <td>${formatDate(p.payment_date)}</td>
+        <td>${p.period_label ?? '—'}</td>
+        <td style="font-weight:600">${formatCurrency(Number(p.amount_paid))}</td>
+        <td style="text-transform:capitalize">${p.payment_method.replace('_', ' ')}</td>
+        <td>${p.notes ?? '—'}</td>
+      </tr>`).join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+      <title>Salary History — ${teacher.full_name}</title>
+      <style>
+        @page { size: auto; margin: 12mm; }
+        body { font-family: sans-serif; font-size: 13px; color: #111; }
+        h1 { font-size: 18px; margin: 0 0 4px; }
+        h2 { font-size: 14px; font-weight: normal; color: #555; margin: 0 0 16px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+        th { background: #f3f4f6; font-weight: 600; }
+        tr:nth-child(even) { background: #f9fafb; }
+        tfoot td { font-weight: bold; background: #f3f4f6; }
+      </style></head><body>
+      <h1>${teacher.full_name}</h1>
+      <h2>Salary Payment History &nbsp;·&nbsp; Employee No: ${teacher.employee_number ?? '—'}</h2>
+      <table>
+        <thead><tr><th>Date</th><th>Period</th><th>Amount</th><th>Method</th><th>Notes</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="2" style="text-align:right">Total (${payments.length} payments)</td><td colspan="3">${formatCurrency(total)}</td></tr></tfoot>
+      </table>
+      <script>window.print()</script>
+    </body></html>`
+    const w = window.open('', '_blank')
+    w?.document.write(html)
+    w?.document.close()
   }
 
   // ── History ────────────────────────────────────────────────────────────────
@@ -417,7 +457,11 @@ export default function TeacherSalariesPage() {
         ) : historyModal?.payments.length === 0 ? (
           <EmptyState icon={<span>💳</span>} title="No salary payments recorded" description="Record the first payment using the + button" />
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+          <div className="space-y-2">
+            <div className="flex justify-end">
+              <Button variant="ghost" icon={<Printer size={14} />} onClick={printSalaryHistory} size="sm">Print</Button>
+            </div>
+            <div className="max-h-[55vh] overflow-y-auto">
             <Table>
               <thead>
                 <tr>
@@ -440,6 +484,7 @@ export default function TeacherSalariesPage() {
                 ))}
               </tbody>
             </Table>
+            </div>
           </div>
         )}
       </Modal>

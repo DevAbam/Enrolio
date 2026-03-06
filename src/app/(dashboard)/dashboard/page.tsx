@@ -8,6 +8,7 @@ import {
 import {
   Users, FileText, CheckCircle, AlertCircle,
   GraduationCap, UserCheck, MessageSquare, ClipboardList,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
@@ -231,6 +232,7 @@ function TeacherDashboard() {
 
 // ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
 function AdminDashboard() {
+  const now = new Date()
   const [revenue, setRevenue] = useState<SchoolRevenueSummary | null>(null)
   const [defaulters, setDefaulters] = useState<StudentFeeSummary[]>([])
   const [studentAtt, setStudentAtt] = useState<AttendanceCounts>({ present: 0, absent: 0, total: 0 })
@@ -239,35 +241,27 @@ function AdminDashboard() {
   const [weeklyAtt, setWeeklyAtt] = useState<WeeklyAttPoint[]>([])
   const [classFees, setClassFees] = useState<ClassFeePoint[]>([])
   const [loading, setLoading] = useState(true)
+  const [chartYear, setChartYear] = useState(now.getFullYear())
+  const [weekOffset, setWeekOffset] = useState(0) // 0 = current week, 1 = prev week, etc.
   const supabase = createClient()
 
+  // ── Main data: KPIs, today's attendance, class fees ──────────────────────
   useEffect(() => {
     async function load() {
       setLoading(true)
       const todayStr = today()
-      const now = new Date()
-
-      const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
-      const sixMonthsAgoStr = sixMonthsAgo.toISOString().split('T')[0]
-      const sevenDaysAgo = new Date(now)
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6)
-      const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0]
 
       const [
         { data: rev, error: revErr },
         { data: defs },
         { data: sAtt },
         { data: tAtt },
-        { data: payments },
-        { data: weekAtt },
         { data: allFees },
       ] = await Promise.all([
         supabase.from('school_revenue_summary').select('*').single(),
         supabase.from('student_fee_summary').select('*').gt('outstanding', 0).eq('is_active', true).order('outstanding', { ascending: false }).limit(20),
         supabase.from('student_attendance').select('status').eq('attendance_date', todayStr),
         supabase.from('teacher_attendance').select('status').eq('attendance_date', todayStr),
-        supabase.from('payments').select('amount_paid, payment_date').gte('payment_date', sixMonthsAgoStr).order('payment_date'),
-        supabase.from('student_attendance').select('attendance_date, status').gte('attendance_date', sevenDaysAgoStr).lte('attendance_date', todayStr),
         supabase.from('student_fee_summary').select('class_name, total_paid, outstanding').eq('is_active', true),
       ])
 
@@ -282,29 +276,6 @@ function AdminDashboard() {
       const tPresent = tAtt?.filter((a) => a.status === 'present' || a.status === 'late').length ?? 0
       setTeacherAtt({ present: tPresent, absent: tTotal - tPresent, total: tTotal })
 
-      // Monthly revenue (last 6 months)
-      const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-      const monthly: MonthlyPoint[] = []
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-        const total = payments?.filter((p) => p.payment_date.startsWith(key)).reduce((s, p) => s + Number(p.amount_paid), 0) ?? 0
-        monthly.push({ month: MONTHS[d.getMonth()], collected: total })
-      }
-      setMonthlyRevenue(monthly)
-
-      // Weekly attendance (last 7 days)
-      const weekly: WeeklyAttPoint[] = []
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(now); d.setDate(d.getDate() - i)
-        const dateStr = d.toISOString().split('T')[0]
-        const dayAtts = weekAtt?.filter((a) => a.attendance_date === dateStr) ?? []
-        const present = dayAtts.filter((a) => a.status === 'present' || a.status === 'late').length
-        weekly.push({ day: d.toLocaleDateString('en', { weekday: 'short' }), present, absent: dayAtts.length - present })
-      }
-      setWeeklyAtt(weekly)
-
-      // Class fee breakdown
       const classMap = new Map<string, { paid: number; outstanding: number }>()
       allFees?.forEach((s) => {
         const name = s.class_name ?? 'No Class'
@@ -317,6 +288,53 @@ function AdminDashboard() {
     }
     load()
   }, [supabase])
+
+  // ── Monthly revenue: reloads when chartYear changes ───────────────────────
+  useEffect(() => {
+    async function loadMonthly() {
+      const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      const from = `${chartYear}-01-01`
+      const to   = `${chartYear}-12-31`
+      const { data: payments } = await supabase
+        .from('payments').select('amount_paid, payment_date')
+        .gte('payment_date', from).lte('payment_date', to)
+      const monthly: MonthlyPoint[] = MONTHS.map((month, idx) => {
+        const key = `${chartYear}-${String(idx + 1).padStart(2, '0')}`
+        const collected = payments?.filter((p) => p.payment_date.startsWith(key))
+          .reduce((s, p) => s + Number(p.amount_paid), 0) ?? 0
+        return { month, collected }
+      })
+      setMonthlyRevenue(monthly)
+    }
+    loadMonthly()
+  }, [supabase, chartYear])
+
+  // ── Weekly attendance: reloads when weekOffset changes ────────────────────
+  useEffect(() => {
+    async function loadWeekly() {
+      const end = new Date()
+      end.setDate(end.getDate() - weekOffset * 7)
+      const endStr = end.toISOString().split('T')[0]
+      const start = new Date(end)
+      start.setDate(start.getDate() - 6)
+      const startStr = start.toISOString().split('T')[0]
+
+      const { data: weekAtt } = await supabase
+        .from('student_attendance').select('attendance_date, status')
+        .gte('attendance_date', startStr).lte('attendance_date', endStr)
+
+      const weekly: WeeklyAttPoint[] = []
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(end); d.setDate(d.getDate() - i)
+        const dateStr = d.toISOString().split('T')[0]
+        const dayAtts = weekAtt?.filter((a) => a.attendance_date === dateStr) ?? []
+        const present = dayAtts.filter((a) => a.status === 'present' || a.status === 'late').length
+        weekly.push({ day: d.toLocaleDateString('en', { weekday: 'short' }), present, absent: dayAtts.length - present })
+      }
+      setWeeklyAtt(weekly)
+    }
+    loadWeekly()
+  }, [supabase, weekOffset])
 
   const collectionRate = revenue && Number(revenue.expected_revenue) > 0
     ? Math.round((Number(revenue.collected_revenue) / Number(revenue.expected_revenue)) * 100) : 0
@@ -364,8 +382,20 @@ function AdminDashboard() {
 
           {/* Monthly Revenue Area Chart */}
           <div className="card p-6 lg:col-span-2">
-            <h3 className="section-title">Monthly Fee Collections</h3>
-            <p className="text-xs text-fg-subtle mt-0.5 mb-5">Last 6 months</p>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="section-title">Monthly Fee Collections</h3>
+              <select
+                className="input max-w-[90px] text-xs py-1"
+                value={chartYear}
+                onChange={(e) => setChartYear(Number(e.target.value))}
+              >
+                {[-2,-1,0,1].map(offset => {
+                  const y = now.getFullYear() + offset
+                  return <option key={y} value={y}>{y}</option>
+                })}
+              </select>
+            </div>
+            <p className="text-xs text-fg-subtle mt-0.5 mb-5">All 12 months of {chartYear}</p>
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={monthlyRevenue} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                 <defs>
@@ -437,8 +467,26 @@ function AdminDashboard() {
 
           {/* Weekly Attendance Bar Chart */}
           <div className="card p-6 lg:col-span-2">
-            <h3 className="section-title">Weekly Student Attendance</h3>
-            <p className="text-xs text-fg-subtle mt-0.5 mb-5">Last 7 days</p>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="section-title">Weekly Student Attendance</h3>
+              <div className="flex items-center gap-1">
+                <button
+                  className="btn-ghost p-1 rounded"
+                  onClick={() => setWeekOffset(w => w + 1)}
+                  title="Previous week"
+                ><ChevronLeft size={15} /></button>
+                <span className="text-xs text-fg-muted px-1">
+                  {weekOffset === 0 ? 'This week' : `${weekOffset}w ago`}
+                </span>
+                <button
+                  className="btn-ghost p-1 rounded"
+                  onClick={() => setWeekOffset(w => Math.max(0, w - 1))}
+                  disabled={weekOffset === 0}
+                  title="Next week"
+                ><ChevronRight size={15} /></button>
+              </div>
+            </div>
+            <p className="text-xs text-fg-subtle mt-0.5 mb-5">7-day student attendance</p>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={weeklyAtt} margin={{ top: 4, right: 4, left: 0, bottom: 0 }} barGap={3}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" strokeOpacity={0.7} vertical={false} />

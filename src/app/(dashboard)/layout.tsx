@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 import { RoleProvider, useRole } from '@/contexts/RoleContext'
+import { TermProvider } from '@/lib/term-context'
 
 const pageTitles: Record<string, string> = {
   '/dashboard':           'Dashboard',
@@ -12,6 +13,7 @@ const pageTitles: Record<string, string> = {
   '/teachers':            'Teachers',
   '/teachers/salaries':   'Teacher Salaries',
   '/classes':             'Classes',
+  '/terms':               'Terms & Semesters',
   '/payments':            'Fee Payments',
   '/attendance/students': 'Student Attendance',
   '/attendance/teachers': 'Teacher Attendance',
@@ -21,6 +23,7 @@ const pageTitles: Record<string, string> = {
 function getPageTitle(pathname: string): string {
   if (pageTitles[pathname]) return pageTitles[pathname]
   if (pathname.startsWith('/students/')) return 'Student Detail'
+  if (pathname.startsWith('/teachers/') && !pathname.startsWith('/teachers/salaries')) return 'Teacher Detail'
   return 'SchoolOps Pro'
 }
 
@@ -62,7 +65,9 @@ function DashboardShell({ children }: { children: React.ReactNode }) {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <RoleProvider>
-      <DashboardShell>{children}</DashboardShell>
+      <TermProvider>
+        <DashboardShell>{children}</DashboardShell>
+      </TermProvider>
     </RoleProvider>
   )
 }

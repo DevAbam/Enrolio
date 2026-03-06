@@ -12,22 +12,46 @@ export default function LoginPage() {
   const [error,    setError]    = useState('')
   const router = useRouter()
 
+  function friendlyError(err: unknown): string {
+    if (err instanceof TypeError || (err instanceof Error && err.message.toLowerCase().includes('fetch'))) {
+      return 'No internet connection. Please check your network and try again.'
+    }
+    if (err instanceof Error) {
+      const msg = err.message.toLowerCase()
+      if (msg.includes('invalid_credentials') || msg.includes('invalid login') || msg.includes('invalid email or password') || msg.includes('email not confirmed') === false && msg.includes('credentials'))
+        return 'Incorrect email or password. Please try again.'
+      if (msg.includes('email not confirmed'))
+        return 'Please confirm your email address before signing in.'
+      if (msg.includes('too many requests') || msg.includes('rate limit'))
+        return 'Too many login attempts. Please wait a few minutes and try again.'
+      if (msg.includes('user not found'))
+        return 'No account found with this email address.'
+      return err.message
+    }
+    return 'An unexpected error occurred. Please try again.'
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
 
-    const supabase = createClient()
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    try {
+      const supabase = createClient()
+      const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
 
-    if (authError) {
-      setError(authError.message)
+      if (authError) {
+        setError(friendlyError(authError))
+        setLoading(false)
+        return
+      }
+
+      router.push('/dashboard')
+      router.refresh()
+    } catch (err) {
+      setError(friendlyError(err))
       setLoading(false)
-      return
     }
-
-    router.push('/dashboard')
-    router.refresh()
   }
 
   return (

@@ -7,21 +7,27 @@ import { formatDate } from '@/lib/utils/date'
 import type { Payment } from '@/types'
 
 interface ReceiptModalProps {
-  payment:     Payment
-  studentName: string
-  className?:  string
-  schoolName:  string
-  onClose:     () => void
+  payment:      Payment
+  studentName:  string
+  className?:   string
+  schoolName:   string
+  outstanding?: number
+  onClose:      () => void
 }
 
-export function ReceiptModal({ payment, studentName, className, schoolName, onClose }: ReceiptModalProps) {
+export function ReceiptModal({ payment, studentName, className, schoolName, outstanding, onClose }: ReceiptModalProps) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
   function handlePrint() {
+    const style = document.createElement('style')
+    style.id = 'receipt-page-style'
+    style.textContent = '@page { size: 80mm auto; margin: 6mm; }'
+    document.head.appendChild(style)
     document.body.classList.add('printing-receipt')
     window.print()
     document.body.classList.remove('printing-receipt')
+    document.getElementById('receipt-page-style')?.remove()
   }
 
   // Close on Escape
@@ -92,6 +98,13 @@ export function ReceiptModal({ payment, studentName, className, schoolName, onCl
             <span className="text-sm text-fg-subtle print:text-gray-600">Amount Paid</span>
             <span className="text-xl font-bold text-accent print:text-green-700">{formatCurrency(Number(payment.amount_paid))}</span>
           </div>
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm text-fg-subtle print:text-gray-600">Balance Remaining</span>
+            {outstanding != null && outstanding > 0
+              ? <span className="text-base font-bold text-red-500 print:text-red-600">{formatCurrency(outstanding)}</span>
+              : <span className="text-base font-bold text-accent print:text-green-700">Fully Paid</span>
+            }
+          </div>
           {payment.payment_method && (
             <div className="flex justify-between text-xs mb-2">
               <span className="text-fg-subtle print:text-gray-600">Method</span>
@@ -99,9 +112,9 @@ export function ReceiptModal({ payment, studentName, className, schoolName, onCl
             </div>
           )}
           {payment.notes && (
-            <div className="flex justify-between text-xs mb-2">
-              <span className="text-fg-subtle print:text-gray-600">Notes</span>
-              <span className="text-fg print:text-black text-right max-w-[180px]">{payment.notes}</span>
+            <div className="text-xs mb-2">
+              <p className="text-fg-subtle print:text-gray-600 mb-0.5">Notes</p>
+              <p className="text-fg print:text-black whitespace-pre-wrap break-words">{payment.notes}</p>
             </div>
           )}
 

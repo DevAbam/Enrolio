@@ -2,24 +2,28 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, MessageSquare, Pencil, Printer } from 'lucide-react'
+import { ArrowLeft, MessageSquare, Pencil, Printer, ChevronUp, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/client'
 import { useRole } from '@/contexts/RoleContext'
+import { useTerm } from '@/lib/term-context'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
 import { Table } from '@/components/ui/Table'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Skeleton } from '@/components/ui/Skeleton'
+import { Pagination } from '@/components/ui/Pagination'
 import { PaymentForm } from '@/components/payments/PaymentForm'
 import { ReceiptModal } from '@/components/receipts/ReceiptModal'
 import { formatCurrency } from '@/lib/utils/currency'
 import { formatDate } from '@/lib/utils/date'
 import type { StudentFeeSummary, Payment, Class } from '@/types'
+
+const PAGE_SIZE = 10
 
 const editSchema = z.object({
   full_name:        z.string().min(1),
@@ -34,18 +38,29 @@ const editSchema = z.object({
 })
 type EditForm = z.infer<typeof editSchema>
 
+type StudentWithExtras = StudentFeeSummary & {
+  date_of_birth?: string | null
+  admitted_at?: string | null
+  class_level?: number | null
+  active_term_id?: string | null
+  active_term_label?: string | null
+}
+
 export default function StudentDetailPage() {
   const { id }          = useParams<{ id: string }>()
   const searchParams    = useSearchParams()
   const router          = useRouter()
   const { isAdmin, schoolName } = useRole()
-  const [student, setStudent] = useState<StudentFeeSummary | null>(null)
-  const [payments, setPayments] = useState<Payment[]>([])
-  const [classes,  setClasses]  = useState<Class[]>([])
-  const [loading,  setLoading]  = useState(true)
+  const { activeTerm }  = useTerm()
+  const [student, setStudent]           = useState<StudentWithExtras | null>(null)
+  const [payments, setPayments]         = useState<Payment[]>([])
+  const [classes,  setClasses]          = useState<Class[]>([])
+  const [loading,  setLoading]          = useState(true)
+  const [payPage,  setPayPage]          = useState(1)
   const [editModal,    setEditModal]    = useState(searchParams.get('edit') === '1')
   const [payModal,     setPayModal]     = useState(false)
   const [receiptPayment, setReceiptPayment] = useState<Payment | null>(null)
+  const [promoting,    setPromoting]    = useState(false)
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -53,9 +68,9 @@ export default function StudentDetailPage() {
     const [{ data: s }, { data: p }, { data: cls }] = await Promise.all([
       supabase.from('student_fee_summary').select('*').eq('id', id).single(),
       supabase.from('payments').select('*').eq('student_id', id).order('payment_date', { ascending: false }),
-      supabase.from('classes').select('*').order('name'),
+      supabase.from('classes').select('*').order('level', { ascending: true, nullsFirst: false }).order('name'),
     ])
-    setStudent(s)
+    setStudent(s as StudentWithExtras)
     setPayments(p ?? [])
     setClasses(cls ?? [])
     setLoading(false)
@@ -73,6 +88,8 @@ export default function StudentDetailPage() {
         full_name:        student.full_name,
         admission_number: student.admission_number ?? '',
         class_id:         student.class_id ?? '',
+        date_of_birth:    (student as StudentWithExtras).date_of_birth ?? '',
+        gender:           (student.gender as 'male' | 'female' | 'other' | '') ?? '',
         parent_name:      student.parent_name ?? '',
         parent_phone:     student.parent_phone ?? '',
         discount_amount:  student.discount_amount,
@@ -100,6 +117,31 @@ export default function StudentDetailPage() {
     load()
   }
 
+  async function promote(direction: 'up' | 'down') {
+    if (!student) return
+    const currentLevel = (student as StudentWithExtras).class_level
+    if (currentLevel == null) {
+      toast.error('Current class has no level set. Set levels in the Classes page first.')
+      return
+    }
+    const targetLevel = direction === 'up' ? currentLevel + 1 : currentLevel - 1
+    const targetClass = classes.find(c => (c as Class & { level?: number }).level === targetLevel)
+    if (!targetClass) {
+      toast.error(direction === 'up' ? 'No higher class found. This may be the highest level.' : 'No lower class found.')
+      return
+    }
+    if (!confirm(`${direction === 'up' ? 'Promote' : 'Demote'} ${student.full_name} to ${targetClass.name}?`)) return
+    setPromoting(true)
+    const res = await fetch('/api/promote-student', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ studentId: id, targetClassId: targetClass.id }),
+    })
+    const data = await res.json()
+    if (!res.ok) { toast.error(data.error) } else { toast.success(`Moved to ${targetClass.name}`); load() }
+    setPromoting(false)
+  }
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -115,6 +157,10 @@ export default function StudentDetailPage() {
   if (!student) return <p className="text-gray-500">Student not found.</p>
 
   const outstanding = Math.max(0, Number(student.outstanding))
+  const pagedPayments = payments.slice((payPage - 1) * PAGE_SIZE, payPage * PAGE_SIZE)
+  const yearAdmitted = (student as StudentWithExtras).admitted_at
+    ? new Date((student as StudentWithExtras).admitted_at!).getFullYear()
+    : null
 
   return (
     <div className="space-y-6">
@@ -143,6 +189,22 @@ export default function StudentDetailPage() {
               <dd className="font-medium">{student.admission_number ?? '—'}</dd>
             </div>
             <div className="flex justify-between">
+              <dt className="text-gray-500">Gender</dt>
+              <dd className="font-medium capitalize">{student.gender ?? '—'}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Date of Birth</dt>
+              <dd className="font-medium">
+                {(student as StudentWithExtras).date_of_birth
+                  ? formatDate((student as StudentWithExtras).date_of_birth!)
+                  : '—'}
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Year Admitted</dt>
+              <dd className="font-medium">{yearAdmitted ?? '—'}</dd>
+            </div>
+            <div className="flex justify-between">
               <dt className="text-gray-500">Status</dt>
               <dd><Badge variant={student.is_active ? 'green' : 'gray'}>{student.is_active ? 'Active' : 'Inactive'}</Badge></dd>
             </div>
@@ -161,22 +223,55 @@ export default function StudentDetailPage() {
               <dd className="font-medium">{student.parent_phone ?? '—'}</dd>
             </div>
           </dl>
+
+          {/* Promotion buttons */}
+          {isAdmin && student.class_id && (
+            <>
+              <div className="border-t border-border my-4" />
+              <h3 className="text-sm font-semibold text-fg mb-3">Promotion</h3>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<ChevronUp size={14} />}
+                  onClick={() => promote('up')}
+                  loading={promoting}
+                >
+                  Promote
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<ChevronDown size={14} />}
+                  onClick={() => promote('down')}
+                  loading={promoting}
+                >
+                  Demote
+                </Button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Right — Fee Summary */}
         <div className="card p-5">
-          <h2 className="section-title mb-4">Fee Summary</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-title">Fee Summary</h2>
+            {activeTerm && (
+              <span className="text-xs bg-accent-bg text-accent px-2 py-0.5 rounded-full">{activeTerm.label}</span>
+            )}
+          </div>
           <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-gray-500">Term Fee</span>
               <span className="font-semibold">{formatCurrency(Number(student.term_fee_amount))}</span>
             </div>
-            {Number(student.discount_amount) > 0 && (
-              <div className="flex justify-between">
-                <span className="text-gray-500">Discount</span>
-                <span className="font-semibold text-accent-fg">-{formatCurrency(Number(student.discount_amount))}</span>
-              </div>
-            )}
+            <div className="flex justify-between">
+              <span className="text-gray-500">Discount</span>
+              <span className="font-semibold text-accent-fg">
+                {Number(student.discount_amount) > 0 ? `-${formatCurrency(Number(student.discount_amount))}` : '—'}
+              </span>
+            </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Total Owed</span>
               <span className="font-semibold">{formatCurrency(Number(student.total_owed))}</span>
@@ -234,13 +329,13 @@ export default function StudentDetailPage() {
                 <EmptyState icon={<span>💳</span>} title="No payments recorded" description="Record the first payment using the button above" />
               </td></tr>
             ) : (
-              payments.map((p) => (
+              pagedPayments.map((p) => (
                 <tr key={p.id}>
                   <td>{formatDate(p.payment_date)}</td>
                   <td className="font-medium text-accent-fg">{formatCurrency(Number(p.amount_paid))}</td>
                   <td className="capitalize text-fg-muted">{p.payment_method?.replace('_', ' ') ?? '—'}</td>
                   <td className="text-fg-muted text-xs">{p.receipt_number ?? '—'}</td>
-                  <td className="text-fg-muted max-w-xs truncate">{p.notes ?? '—'}</td>
+                  <td className="text-fg-muted max-w-xs truncate" title={p.notes ?? ''}>{p.notes ?? '—'}</td>
                   <td>
                     <button
                       className="btn-ghost p-1.5 rounded"
@@ -255,6 +350,9 @@ export default function StudentDetailPage() {
             )}
           </tbody>
         </Table>
+        {payments.length > PAGE_SIZE && (
+          <Pagination page={payPage} pageSize={PAGE_SIZE} total={payments.length} onPageChange={setPayPage} />
+        )}
       </div>
 
       {/* Payment Modal */}
@@ -262,6 +360,7 @@ export default function StudentDetailPage() {
         <PaymentForm
           studentId={id}
           outstanding={outstanding}
+          termId={activeTerm?.id}
           onSuccess={() => { setPayModal(false); load() }}
           onCancel={() => setPayModal(false)}
         />
@@ -274,6 +373,7 @@ export default function StudentDetailPage() {
           studentName={student.full_name}
           className={student.class_name ?? undefined}
           schoolName={schoolName ?? 'School'}
+          outstanding={outstanding}
           onClose={() => setReceiptPayment(null)}
         />
       )}
@@ -296,6 +396,21 @@ export default function StudentDetailPage() {
               <select className="input" {...register('class_id')}>
                 <option value="">— None —</option>
                 {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Date of Birth</label>
+              <input type="date" className="input" {...register('date_of_birth')} />
+            </div>
+            <div>
+              <label className="label">Gender</label>
+              <select className="input" {...register('gender')}>
+                <option value="">— Select —</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
               </select>
             </div>
           </div>

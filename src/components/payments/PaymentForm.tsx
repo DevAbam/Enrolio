@@ -22,11 +22,12 @@ type FormData = z.infer<typeof schema>
 interface PaymentFormProps {
   studentId:   string
   outstanding: number
+  termId?:     string | null
   onSuccess:   () => void
   onCancel:    () => void
 }
 
-export function PaymentForm({ studentId, outstanding, onSuccess, onCancel }: PaymentFormProps) {
+export function PaymentForm({ studentId, outstanding, termId, onSuccess, onCancel }: PaymentFormProps) {
   const supabase = createClient()
 
   const { register, handleSubmit, watch, reset, formState: { errors, isSubmitting } } = useForm<FormData>({
@@ -56,6 +57,7 @@ export function PaymentForm({ studentId, outstanding, onSuccess, onCancel }: Pay
       receipt_number: receipt,
       notes:          values.notes || null,
       recorded_by:    user!.id,
+      term_id:        termId ?? null,
     })
 
     if (error) {

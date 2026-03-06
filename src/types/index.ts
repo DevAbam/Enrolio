@@ -1,6 +1,6 @@
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused'
 export type PaymentMethod    = 'cash' | 'bank_transfer' | 'momo' | 'card' | 'other'
-export type SmsType          = 'fee_reminder' | 'general' | 'bulk'
+export type SmsType          = 'fee_reminder' | 'general' | 'bulk' | 'broadcast'
 export type SmsStatus        = 'success' | 'failed' | 'pending'
 export type UserRole         = 'admin' | 'accountant' | 'teacher' | 'receptionist'
 
@@ -67,8 +67,23 @@ export interface TeacherAttendance {
 
 export interface SmsLog {
   id: string; school_id: string; student_id?: string; sent_by?: string
-  parent_phone: string; message: string; sms_type: SmsType
+  parent_phone: string; message: string; sms_type: SmsType; recipient_count: number
   status: SmsStatus; provider_response?: string; sent_at: string
+}
+
+export interface SmsCreditTransaction {
+  id: string; school_id: string; amount: number
+  type: 'recharge' | 'deduction'; description?: string
+  created_by?: string; created_at: string
+}
+
+export type PurchaseStatus = 'pending' | 'success' | 'failed'
+
+export interface SmsCreditPurchase {
+  id: string; school_id: string; paystack_reference: string
+  credits_purchased: number; amount_pesewas: number
+  status: PurchaseStatus; initiated_by?: string | null
+  verified_at?: string | null; created_at: string; updated_at: string
 }
 
 // View types — these come from the DB views

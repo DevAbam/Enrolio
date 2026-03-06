@@ -1,42 +1,86 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient }      from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { sendSms }           from '@/lib/sms/provider'
+import { sendSmsBatch }      from '@/lib/sms/provider'
+
+/** Normalize Ghana phone numbers to international format (233XXXXXXXXX) */
+function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '')          // strip non-digits
+  if (digits.startsWith('233')) return digits       // already international
+  if (digits.startsWith('0') && digits.length === 10) return '233' + digits.slice(1)
+  return digits                                     // unknown format — pass through
+}
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user }, error } = await supabase.auth.getUser()
   if (error || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: me } = await supabase.from('users').select('school_id').eq('id', user.id).single()
+  const { data: me } = await supabase.from('users').select('school_id, role').eq('id', user.id).single()
   if (!me) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { recipients } = await req.json() as {
+  const body = await req.json() as {
     recipients: Array<{ student_id?: string; phone: string; message: string }>
+    sms_type?: string
   }
+  const { recipients, sms_type } = body
   if (!recipients?.length) return NextResponse.json({ error: 'No recipients' }, { status: 400 })
 
   const admin = createAdminClient()
-  const results: Array<{ phone: string; success: boolean }> = []
 
-  for (const r of recipients) {
-    const result = await sendSms(r.phone, r.message)
-    await admin.from('sms_logs').insert({
-      school_id:         me.school_id,
-      student_id:        r.student_id ?? null,
-      sent_by:           user.id,
-      parent_phone:      r.phone,
-      message:           r.message,
-      sms_type:          recipients.length === 1 ? 'fee_reminder' : 'bulk',
-      status:            result.success ? 'success' : 'failed',
-      provider_response: result.providerResponse,
-    })
-    results.push({ phone: r.phone, success: result.success })
+  // Check SMS credit balance
+  const { data: school } = await admin
+    .from('schools')
+    .select('sms_credits')
+    .eq('id', me.school_id)
+    .single()
+
+  const currentCredits = school?.sms_credits ?? 0
+  if (currentCredits < recipients.length) {
+    return NextResponse.json(
+      { error: 'Insufficient SMS credits', credits: currentCredits, required: recipients.length },
+      { status: 402 }
+    )
   }
 
-  return NextResponse.json({
-    results,
-    successCount: results.filter((r) => r.success).length,
-    failCount:    results.filter((r) => !r.success).length,
+  // Send via Arkesel
+  const results = await sendSmsBatch(recipients.map((r) => ({ phone: normalizePhone(r.phone), message: r.message })))
+  const successCount = results.filter((r) => r.success).length
+  const failCount    = results.filter((r) => !r.success).length
+
+  const isSingle  = recipients.length === 1
+  const allFailed = successCount === 0
+  const status    = allFailed ? 'failed' : successCount === recipients.length ? 'success' : 'partial'
+
+  // Deduct credits equal to the number actually attempted
+  if (successCount > 0) {
+    await admin.rpc('deduct_sms_credits', {
+      p_school_id: me.school_id,
+      p_amount:    successCount,
+    })
+    await admin.from('sms_credit_transactions').insert({
+      school_id:   me.school_id,
+      amount:      -successCount,
+      type:        'deduction',
+      description: `${successCount} SMS sent (${sms_type ?? 'general'})`,
+      created_by:  user.id,
+    })
+  }
+
+  // Determine the log sms_type (guard against invalid values)
+  const validTypes = ['fee_reminder', 'general', 'bulk', 'broadcast']
+  const logType = validTypes.includes(sms_type ?? '') ? sms_type! : (isSingle ? 'general' : 'bulk')
+
+  await admin.from('sms_logs').insert({
+    school_id:       me.school_id,
+    student_id:      isSingle ? (recipients[0].student_id ?? null) : null,
+    sent_by:         user.id,
+    parent_phone:    isSingle ? recipients[0].phone : `${recipients.length} recipients`,
+    message:         recipients[0].message,
+    sms_type:        logType,
+    status,
+    recipient_count: recipients.length,
   })
+
+  return NextResponse.json({ results, successCount, failCount })
 }

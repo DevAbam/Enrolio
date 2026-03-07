@@ -29,24 +29,24 @@ interface HistoryRecord {
 }
 
 const statuses: { value: AttendanceStatus; label: string; activeClass: string; printClass: string }[] = [
-  { value: 'present', label: 'Present',  activeClass: 'bg-accent text-white border-accent',         printClass: 'print:border-2 print:border-green-800 print:font-bold' },
-  { value: 'absent',  label: 'Absent',   activeClass: 'bg-red-600 text-white border-red-600',       printClass: 'print:border-2 print:border-red-800 print:font-bold' },
-  { value: 'late',    label: 'Late',     activeClass: 'bg-yellow-500 text-white border-yellow-500', printClass: 'print:border-2 print:border-yellow-800 print:font-bold' },
-  { value: 'excused', label: 'Excused',  activeClass: 'bg-gray-500 text-white border-gray-500',     printClass: 'print:border-2 print:border-gray-800 print:font-bold' },
+  { value: 'present', label: 'Present', activeClass: 'bg-accent text-white border-accent', printClass: 'print:border-2 print:border-green-800 print:font-bold' },
+  { value: 'absent', label: 'Absent', activeClass: 'bg-red-600 text-white border-red-600', printClass: 'print:border-2 print:border-red-800 print:font-bold' },
+  { value: 'late', label: 'Late', activeClass: 'bg-yellow-500 text-white border-yellow-500', printClass: 'print:border-2 print:border-yellow-800 print:font-bold' },
+  { value: 'excused', label: 'Excused', activeClass: 'bg-gray-500 text-white border-gray-500', printClass: 'print:border-2 print:border-gray-800 print:font-bold' },
 ]
 
 export default function TeacherAttendancePage() {
   const { isAdmin, schoolName, schoolLogoUrl } = useRole()
   const { activeTerm, allTerms, selectedTerm } = useTerm()
-  const [date,         setDate]         = useState(today())
-  const [teachers,     setTeachers]     = useState<Teacher[]>([])
-  const [records,      setRecords]      = useState<Map<string, AttendanceRecord>>(new Map())
-  const [loading,      setLoading]      = useState(true)
-  const [saving,       setSaving]       = useState(false)
-  const [historyTerm,  setHistoryTerm]  = useState(selectedTerm?.id ?? '')
-  const [historyYear,  setHistoryYear]  = useState('')
-  const [historyData,  setHistoryData]  = useState<HistoryRecord[]>([])
-  const [historyLoading,    setHistoryLoading]    = useState(false)
+  const [date, setDate] = useState(today())
+  const [teachers, setTeachers] = useState<Teacher[]>([])
+  const [records, setRecords] = useState<Map<string, AttendanceRecord>>(new Map())
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [historyTerm, setHistoryTerm] = useState(selectedTerm?.id ?? '')
+  const [historyYear, setHistoryYear] = useState('')
+  const [historyData, setHistoryData] = useState<HistoryRecord[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
   const [teacherSummaryMode, setTeacherSummaryMode] = useState(false)
   const supabase = createClient()
 
@@ -92,10 +92,10 @@ export default function TeacherAttendancePage() {
       .select('*, teachers(full_name, employee_number)')
       .order('attendance_date', { ascending: false })
 
-    if (historyTerm)      query = query.eq('term_id', historyTerm)
+    if (historyTerm) query = query.eq('term_id', historyTerm)
     else if (historyYear) {
       query = query.gte('attendance_date', `${historyYear}-01-01`)
-                   .lte('attendance_date', `${historyYear}-12-31`)
+        .lte('attendance_date', `${historyYear}-12-31`)
     }
     query.then(({ data }) => {
       setHistoryData((data ?? []) as HistoryRecord[])
@@ -129,12 +129,12 @@ export default function TeacherAttendancePage() {
     const { data: me } = await supabase.from('users').select('school_id').eq('id', user!.id).single()
 
     const rows = Array.from(records.values()).map((r) => ({
-      school_id:       me!.school_id,
-      teacher_id:      r.teacher_id,
+      school_id: me!.school_id,
+      teacher_id: r.teacher_id,
       attendance_date: date,
-      status:          r.status,
-      marked_by:       user!.id,
-      term_id:         activeTerm?.id ?? null,
+      status: r.status,
+      marked_by: user!.id,
+      term_id: activeTerm?.id ?? null,
     }))
 
     const { error } = await supabase
@@ -179,8 +179,8 @@ export default function TeacherAttendancePage() {
 
   const counts = {
     present: Array.from(records.values()).filter((r) => r.status === 'present').length,
-    absent:  Array.from(records.values()).filter((r) => r.status === 'absent').length,
-    late:    Array.from(records.values()).filter((r) => r.status === 'late').length,
+    absent: Array.from(records.values()).filter((r) => r.status === 'absent').length,
+    late: Array.from(records.values()).filter((r) => r.status === 'late').length,
     excused: Array.from(records.values()).filter((r) => r.status === 'excused').length,
   }
 
@@ -311,7 +311,9 @@ export default function TeacherAttendancePage() {
                   <TableSkeleton rows={6} cols={8} />
                 ) : teacherSummary.length === 0 ? (
                   <tr><td colSpan={8}>
-                    <EmptyState icon={<span>📋</span>} title="No attendance records found" description="No records match the selected filters" />
+                    <EmptyState
+                      //  icon={<span>📋</span>}
+                      title="No attendance records found" description="No records match the selected filters" />
                   </td></tr>
                 ) : (
                   teacherSummary.map(row => {
@@ -352,7 +354,9 @@ export default function TeacherAttendancePage() {
                   <TableSkeleton rows={6} cols={4} />
                 ) : historyData.length === 0 ? (
                   <tr><td colSpan={4}>
-                    <EmptyState icon={<span>📋</span>} title="No records found" description="No attendance records match the selected year or term" />
+                    <EmptyState
+                      //  icon={<span>📋</span>}
+                      title="No records found" description="No attendance records match the selected year or term" />
                   </td></tr>
                 ) : (
                   historyData.map((r) => (
@@ -364,9 +368,9 @@ export default function TeacherAttendancePage() {
                         <span className={cn(
                           'px-2 py-0.5 text-xs rounded border font-medium',
                           r.status === 'present' ? 'bg-accent text-white border-accent' :
-                          r.status === 'absent'  ? 'bg-red-600 text-white border-red-600' :
-                          r.status === 'late'    ? 'bg-yellow-500 text-white border-yellow-500' :
-                          'bg-gray-500 text-white border-gray-500'
+                            r.status === 'absent' ? 'bg-red-600 text-white border-red-600' :
+                              r.status === 'late' ? 'bg-yellow-500 text-white border-yellow-500' :
+                                'bg-gray-500 text-white border-gray-500'
                         )}>
                           {r.status}
                         </span>
@@ -393,7 +397,9 @@ export default function TeacherAttendancePage() {
                 <TableSkeleton rows={6} cols={3} />
               ) : teachers.length === 0 ? (
                 <tr><td colSpan={3}>
-                  <EmptyState icon={<span>👨‍🏫</span>} title="No active teachers found" description="Add teachers in the Teachers section" />
+                  <EmptyState
+                    // icon={<span>👨‍🏫</span>} 
+                    title="No active teachers found" description="Add teachers in the Teachers section" />
                 </td></tr>
               ) : (
                 teachers.map((t) => {
@@ -426,9 +432,9 @@ export default function TeacherAttendancePage() {
                           <span className={cn(
                             'px-3 py-1 text-xs rounded border font-medium',
                             rec?.status === 'present' ? 'bg-accent text-white border-accent' :
-                            rec?.status === 'absent'  ? 'bg-red-600 text-white border-red-600' :
-                            rec?.status === 'late'    ? 'bg-yellow-500 text-white border-yellow-500' :
-                            'bg-gray-500 text-white border-gray-500'
+                              rec?.status === 'absent' ? 'bg-red-600 text-white border-red-600' :
+                                rec?.status === 'late' ? 'bg-yellow-500 text-white border-yellow-500' :
+                                  'bg-gray-500 text-white border-gray-500'
                           )}>
                             {rec?.status ?? 'present'}
                           </span>

@@ -20,25 +20,25 @@ type PromoteStudent = { id: string; full_name: string; admission_number: string 
 type ClassWithLevel = Class & { level?: number | null }
 
 const classSchema = z.object({
-  name:            z.string().min(1, 'Class name is required'),
+  name: z.string().min(1, 'Class name is required'),
   term_fee_amount: z.coerce.number().min(0, 'Fee must be 0 or more'),
-  academic_year:   z.string().optional(),
-  level:           z.coerce.number().int().optional().nullable(),
+  academic_year: z.string().optional(),
+  level: z.coerce.number().int().optional().nullable(),
 })
 type ClassForm = z.infer<typeof classSchema>
 
 export default function ClassesPage() {
-  const [classes,  setClasses]  = useState<ClassWithLevel[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [modalOpen, setModal]   = useState(false)
-  const [editing,  setEditing]  = useState<ClassWithLevel | null>(null)
+  const [classes, setClasses] = useState<ClassWithLevel[]>([])
+  const [loading, setLoading] = useState(true)
+  const [modalOpen, setModal] = useState(false)
+  const [editing, setEditing] = useState<ClassWithLevel | null>(null)
   const [promoting, setPromoting] = useState<string | null>(null)
   // promote modal state
   const [promoteModal, setPromoteModal] = useState<{ cls: ClassWithLevel; nextCls: ClassWithLevel } | null>(null)
   const [promoteStudents, setPromoteStudents] = useState<PromoteStudent[]>([])
   const [promoteSelected, setPromoteSelected] = useState<Set<string>>(new Set())
   const [promoteLoading, setPromoteLoading] = useState(false)
-  const [promoteSaving,  setPromoteSaving]  = useState(false)
+  const [promoteSaving, setPromoteSaving] = useState(false)
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -73,10 +73,10 @@ export default function ClassesPage() {
 
   async function onSubmit(values: ClassForm) {
     const payload = {
-      name:            values.name,
+      name: values.name,
       term_fee_amount: values.term_fee_amount,
-      academic_year:   values.academic_year || null,
-      level:           values.level ?? null,
+      academic_year: values.academic_year || null,
+      level: values.level ?? null,
     }
     if (editing) {
       const { error } = await supabase.from('classes').update(payload).eq('id', editing.id)
@@ -124,7 +124,7 @@ export default function ClassesPage() {
     if (ids.length === 0) { toast.error('No students selected.'); return }
     setPromoteSaving(true)
     const { error } = await supabase.rpc('promote_students', {
-      p_student_ids:     ids,
+      p_student_ids: ids,
       p_target_class_id: promoteModal.nextCls.id,
     })
     if (error) { toast.error(error.message) }
@@ -158,7 +158,7 @@ export default function ClassesPage() {
             ) : classes.length === 0 ? (
               <tr><td colSpan={5}>
                 <EmptyState
-                  icon={<span>📚</span>}
+                  // icon={<span>📚</span>}
                   title="No classes yet"
                   description="Add your first class to get started"
                   action={<Button variant="secondary" icon={<Plus size={14} />} onClick={openAdd} size="sm">Add Class</Button>}

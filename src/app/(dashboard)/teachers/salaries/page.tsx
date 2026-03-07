@@ -26,17 +26,17 @@ function currentMonthLabel() {
 function monthRange(year: number, month: number) {
   const from = `${year}-${String(month).padStart(2, '0')}-01`
   const lastDay = new Date(year, month, 0).getDate()
-  const to   = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
+  const to = `${year}-${String(month).padStart(2, '0')}-${lastDay}`
   return { from, to }
 }
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 const paySchema = z.object({
-  amount_paid:    z.coerce.number().positive('Amount must be positive'),
-  payment_date:   z.string().min(1),
-  period_label:   z.string().min(1, 'Period is required'),
+  amount_paid: z.coerce.number().positive('Amount must be positive'),
+  payment_date: z.string().min(1),
+  period_label: z.string().min(1, 'Period is required'),
   payment_method: z.enum(['cash', 'bank_transfer', 'mobile_money', 'cheque']),
-  notes:          z.string().optional(),
+  notes: z.string().optional(),
 })
 type PayForm = z.infer<typeof paySchema>
 
@@ -47,26 +47,26 @@ type SalaryForm = z.infer<typeof salarySchema>
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface TeacherRow extends Teacher {
-  paidThisPeriod:      number
+  paidThisPeriod: number
   outstandingThisPeriod: number
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function TeacherSalariesPage() {
   const { isAdmin, schoolName: ctxSchoolName, schoolLogoUrl } = useRole()
-  const supabase    = createClient()
+  const supabase = createClient()
 
-  const now   = new Date()
-  const [selYear,  setSelYear]  = useState(now.getFullYear())
+  const now = new Date()
+  const [selYear, setSelYear] = useState(now.getFullYear())
   const [selMonth, setSelMonth] = useState(now.getMonth() + 1)
 
-  const [teachers,  setTeachers]  = useState<TeacherRow[]>([])
-  const [loading,   setLoading]   = useState(true)
+  const [teachers, setTeachers] = useState<TeacherRow[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const [payModal,       setPayModal]       = useState<TeacherRow | null>(null)
+  const [payModal, setPayModal] = useState<TeacherRow | null>(null)
   const [setSalaryModal, setSetSalaryModal] = useState<TeacherRow | null>(null)
-  const [historyModal,   setHistoryModal]   = useState<{ teacher: TeacherRow; payments: TeacherSalaryPayment[] } | null>(null)
-  const [histLoading,    setHistLoading]    = useState(false)
+  const [historyModal, setHistoryModal] = useState<{ teacher: TeacherRow; payments: TeacherSalaryPayment[] } | null>(null)
+  const [histLoading, setHistLoading] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -84,9 +84,9 @@ export default function TeacherSalariesPage() {
         .reduce((sum, p) => sum + Number(p.amount_paid), 0)
       return {
         ...t,
-        salary_amount:          salaryAmount,
-        paidThisPeriod:         paid,
-        outstandingThisPeriod:  Math.max(0, salaryAmount - paid),
+        salary_amount: salaryAmount,
+        paidThisPeriod: paid,
+        outstandingThisPeriod: Math.max(0, salaryAmount - paid),
       }
     })
 
@@ -97,10 +97,10 @@ export default function TeacherSalariesPage() {
   useEffect(() => { load() }, [load])
 
   // ── Stats ──────────────────────────────────────────────────────────────────
-  const totalBill      = teachers.reduce((s, t) => s + t.salary_amount, 0)
-  const totalPaid      = teachers.reduce((s, t) => s + t.paidThisPeriod, 0)
-  const totalOutstand  = teachers.reduce((s, t) => s + t.outstandingThisPeriod, 0)
-  const paidCount      = teachers.filter((t) => t.outstandingThisPeriod === 0 && t.salary_amount > 0).length
+  const totalBill = teachers.reduce((s, t) => s + t.salary_amount, 0)
+  const totalPaid = teachers.reduce((s, t) => s + t.paidThisPeriod, 0)
+  const totalOutstand = teachers.reduce((s, t) => s + t.outstandingThisPeriod, 0)
+  const paidCount = teachers.filter((t) => t.outstandingThisPeriod === 0 && t.salary_amount > 0).length
 
   // ── Payment form ───────────────────────────────────────────────────────────
   const payForm = useForm<PayForm>({
@@ -111,11 +111,11 @@ export default function TeacherSalariesPage() {
   useEffect(() => {
     if (payModal) {
       payForm.reset({
-        amount_paid:    payModal.outstandingThisPeriod > 0 ? payModal.outstandingThisPeriod : payModal.salary_amount,
-        payment_date:   today(),
+        amount_paid: payModal.outstandingThisPeriod > 0 ? payModal.outstandingThisPeriod : payModal.salary_amount,
+        payment_date: today(),
         payment_method: 'cash',
-        period_label:   currentMonthLabel(),
-        notes:          '',
+        period_label: currentMonthLabel(),
+        notes: '',
       })
     }
   }, [payModal, payForm])
@@ -126,14 +126,14 @@ export default function TeacherSalariesPage() {
     const { data: me } = await supabase.from('users').select('school_id').eq('id', user!.id).single()
 
     const { error } = await supabase.from('teacher_salary_payments').insert({
-      school_id:      me!.school_id,
-      teacher_id:     payModal.id,
-      amount_paid:    values.amount_paid,
-      payment_date:   values.payment_date,
-      period_label:   values.period_label,
+      school_id: me!.school_id,
+      teacher_id: payModal.id,
+      amount_paid: values.amount_paid,
+      payment_date: values.payment_date,
+      period_label: values.period_label,
       payment_method: values.payment_method,
-      notes:          values.notes || null,
-      paid_by:        user!.id,
+      notes: values.notes || null,
+      paid_by: user!.id,
     })
 
     if (error) { toast.error(error.message); return }
@@ -152,7 +152,7 @@ export default function TeacherSalariesPage() {
   async function onSalarySubmit(values: SalaryForm) {
     if (!setSalaryModal) return
     const { error } = await supabase.rpc('set_teacher_salary', {
-      p_teacher_id:    setSalaryModal.id,
+      p_teacher_id: setSalaryModal.id,
       p_salary_amount: values.salary_amount,
     })
     if (error) { toast.error(error.message); return }
@@ -229,8 +229,8 @@ export default function TeacherSalariesPage() {
 
   // ── Month options ──────────────────────────────────────────────────────────
   const months = [
-    'January','February','March','April','May','June',
-    'July','August','September','October','November','December',
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
   ]
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1]
 
@@ -303,7 +303,9 @@ export default function TeacherSalariesPage() {
               <TableSkeleton rows={6} cols={7} />
             ) : teachers.length === 0 ? (
               <tr><td colSpan={7}>
-                <EmptyState icon={<span>👨‍🏫</span>} title="No active teachers" description="Add teachers first from the Teachers page" />
+                <EmptyState
+                  // icon={<span>👨‍🏫</span>}
+                  title="No active teachers" description="Add teachers first from the Teachers page" />
               </td></tr>
             ) : (
               teachers.map((t) => (
@@ -475,28 +477,28 @@ export default function TeacherSalariesPage() {
               <Button variant="ghost" icon={<Printer size={14} />} onClick={printSalaryHistory} size="sm">Print</Button>
             </div>
             <div className="max-h-[55vh] overflow-y-auto">
-            <Table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Period</th>
-                  <th>Amount</th>
-                  <th>Method</th>
-                  <th>Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {historyModal?.payments.map((p) => (
-                  <tr key={p.id}>
-                    <td className="text-sm">{formatDate(p.payment_date)}</td>
-                    <td className="text-gray-500 text-xs">{p.period_label ?? '—'}</td>
-                    <td className="font-medium text-accent-fg">{formatCurrency(Number(p.amount_paid))}</td>
-                    <td className="capitalize text-fg-muted text-xs">{p.payment_method.replace('_', ' ')}</td>
-                    <td className="text-fg-muted text-xs max-w-[120px] truncate">{p.notes ?? '—'}</td>
+              <Table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Period</th>
+                    <th>Amount</th>
+                    <th>Method</th>
+                    <th>Notes</th>
                   </tr>
-                ))}
-              </tbody>
-            </Table>
+                </thead>
+                <tbody>
+                  {historyModal?.payments.map((p) => (
+                    <tr key={p.id}>
+                      <td className="text-sm">{formatDate(p.payment_date)}</td>
+                      <td className="text-gray-500 text-xs">{p.period_label ?? '—'}</td>
+                      <td className="font-medium text-accent-fg">{formatCurrency(Number(p.amount_paid))}</td>
+                      <td className="capitalize text-fg-muted text-xs">{p.payment_method.replace('_', ' ')}</td>
+                      <td className="text-fg-muted text-xs max-w-[120px] truncate">{p.notes ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
             </div>
           </div>
         )}

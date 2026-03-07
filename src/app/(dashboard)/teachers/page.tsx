@@ -22,20 +22,20 @@ import type { Teacher, Class } from '@/types'
 const PAGE_SIZE = 10
 
 const teacherSchema = z.object({
-  full_name:       z.string().min(1, 'Full name is required'),
-  phone:           z.string().optional(),
-  email:           z.string().email('Invalid email').optional().or(z.literal('')),
+  full_name: z.string().min(1, 'Full name is required'),
+  phone: z.string().optional(),
+  email: z.string().email('Invalid email').optional().or(z.literal('')),
   employee_number: z.string().optional(),
-  gender:          z.enum(['male', 'female', 'other', '']).optional(),
-  date_of_birth:   z.string().optional(),
-  class_id:        z.string().optional(),
+  gender: z.enum(['male', 'female', 'other', '']).optional(),
+  date_of_birth: z.string().optional(),
+  class_id: z.string().optional(),
 })
 type TeacherForm = z.infer<typeof teacherSchema>
 
 const loginSchema = z.object({
-  email:    z.string().email('Valid email required'),
+  email: z.string().email('Valid email required'),
   password: z.string().min(8, 'Min 8 characters'),
-  classId:  z.string().optional(),
+  classId: z.string().optional(),
 })
 type LoginForm = z.infer<typeof loginSchema>
 
@@ -45,26 +45,26 @@ const pwSchema = z.object({
 type PwForm = z.infer<typeof pwSchema>
 
 interface TeacherWithUser extends Teacher {
-  user_id:  string | null
+  user_id: string | null
   class_id: string | null
 }
 
 export default function TeachersPage() {
   const { isAdmin } = useRole()
-  const router      = useRouter()
-  const [teachers,     setTeachers]     = useState<TeacherWithUser[]>([])
-  const [classes,      setClasses]      = useState<Class[]>([])
-  const [loading,      setLoading]      = useState(true)
-  const [search,       setSearch]       = useState('')
+  const router = useRouter()
+  const [teachers, setTeachers] = useState<TeacherWithUser[]>([])
+  const [classes, setClasses] = useState<Class[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [genderFilter, setGenderFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
-  const [page,         setPage]         = useState(1)
-  const [total,        setTotal]        = useState(0)
-  const [modal,        setModal]        = useState(false)
-  const [editing,      setEditing]      = useState<Teacher | null>(null)
-  const [loginModal,   setLoginModal]   = useState<TeacherWithUser | null>(null)
-  const [loginSaving,  setLoginSaving]  = useState(false)
-  const [pwModal,      setPwModal]      = useState<TeacherWithUser | null>(null)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [modal, setModal] = useState(false)
+  const [editing, setEditing] = useState<Teacher | null>(null)
+  const [loginModal, setLoginModal] = useState<TeacherWithUser | null>(null)
+  const [loginSaving, setLoginSaving] = useState(false)
+  const [pwModal, setPwModal] = useState<TeacherWithUser | null>(null)
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -75,9 +75,9 @@ export default function TeachersPage() {
       .order('full_name')
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
 
-    if (search)       query = query.ilike('full_name', `%${search}%`)
+    if (search) query = query.ilike('full_name', `%${search}%`)
     if (genderFilter) query = query.eq('gender', genderFilter)
-    if (statusFilter === 'active')   query = query.eq('is_active', true)
+    if (statusFilter === 'active') query = query.eq('is_active', true)
     if (statusFilter === 'inactive') query = query.eq('is_active', false)
 
     const [{ data: tData, count }, { data: cData }] = await Promise.all([
@@ -101,7 +101,7 @@ export default function TeachersPage() {
     resolver: zodResolver(teacherSchema),
   })
   const loginForm = useForm<LoginForm>({ resolver: zodResolver(loginSchema) })
-  const pwForm    = useForm<PwForm>({ resolver: zodResolver(pwSchema) })
+  const pwForm = useForm<PwForm>({ resolver: zodResolver(pwSchema) })
 
   function openAdd() {
     setEditing(null)
@@ -127,13 +127,13 @@ export default function TeachersPage() {
 
   async function onSubmit(values: TeacherForm) {
     const payload = {
-      full_name:       values.full_name,
-      phone:           values.phone || null,
-      email:           values.email || null,
+      full_name: values.full_name,
+      phone: values.phone || null,
+      email: values.email || null,
       employee_number: values.employee_number || null,
-      gender:          values.gender || null,
-      date_of_birth:   values.date_of_birth || null,
-      class_id:        values.class_id || null,
+      gender: values.gender || null,
+      date_of_birth: values.date_of_birth || null,
+      class_id: values.class_id || null,
     }
     if (editing) {
       const { error } = await supabase.from('teachers').update(payload).eq('id', editing.id)
@@ -154,14 +154,14 @@ export default function TeachersPage() {
     if (!loginModal) return
     setLoginSaving(true)
     const res = await fetch('/api/teacher-account', {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({
+      body: JSON.stringify({
         teacherId: loginModal.id,
-        email:     values.email,
-        password:  values.password,
-        fullName:  loginModal.full_name,
-        classId:   values.classId || undefined,
+        email: values.email,
+        password: values.password,
+        fullName: loginModal.full_name,
+        classId: values.classId || undefined,
       }),
     })
     const data = await res.json()
@@ -177,9 +177,9 @@ export default function TeachersPage() {
   async function onChangePassword(values: PwForm) {
     if (!pwModal) return
     const res = await fetch('/api/teacher-account/change-password', {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ teacherId: pwModal.id, userId: pwModal.user_id, newPassword: values.newPassword }),
+      body: JSON.stringify({ teacherId: pwModal.id, userId: pwModal.user_id, newPassword: values.newPassword }),
     })
     const data = await res.json()
     if (!res.ok) { toast.error(data.error); return }
@@ -255,7 +255,9 @@ export default function TeachersPage() {
               <TableSkeleton rows={5} cols={isAdmin ? 9 : 7} />
             ) : teachers.length === 0 ? (
               <tr><td colSpan={isAdmin ? 9 : 7}>
-                <EmptyState icon={<span>👨‍🏫</span>} title="No teachers found" action={isAdmin ? <Button variant="secondary" size="sm" onClick={openAdd}>Add Teacher</Button> : undefined} />
+                <EmptyState
+                  //  icon={<span>👨‍🏫</span>}
+                  title="No teachers found" action={isAdmin ? <Button variant="secondary" size="sm" onClick={openAdd}>Add Teacher</Button> : undefined} />
               </td></tr>
             ) : (
               teachers.map((t) => (

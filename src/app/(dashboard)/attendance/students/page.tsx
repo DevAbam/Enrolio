@@ -31,30 +31,30 @@ interface HistoryRecord {
 }
 
 const statuses: { value: AttendanceStatus; label: string; activeClass: string; printClass: string }[] = [
-  { value: 'present', label: 'Present',  activeClass: 'bg-accent text-white border-accent',             printClass: 'print:border-2 print:border-green-800 print:font-bold' },
-  { value: 'absent',  label: 'Absent',   activeClass: 'bg-red-600 text-white border-red-600',           printClass: 'print:border-2 print:border-red-800 print:font-bold' },
-  { value: 'late',    label: 'Late',     activeClass: 'bg-yellow-500 text-white border-yellow-500',     printClass: 'print:border-2 print:border-yellow-800 print:font-bold' },
-  { value: 'excused', label: 'Excused',  activeClass: 'bg-gray-500 text-white border-gray-500',         printClass: 'print:border-2 print:border-gray-800 print:font-bold' },
+  { value: 'present', label: 'Present', activeClass: 'bg-accent text-white border-accent', printClass: 'print:border-2 print:border-green-800 print:font-bold' },
+  { value: 'absent', label: 'Absent', activeClass: 'bg-red-600 text-white border-red-600', printClass: 'print:border-2 print:border-red-800 print:font-bold' },
+  { value: 'late', label: 'Late', activeClass: 'bg-yellow-500 text-white border-yellow-500', printClass: 'print:border-2 print:border-yellow-800 print:font-bold' },
+  { value: 'excused', label: 'Excused', activeClass: 'bg-gray-500 text-white border-gray-500', printClass: 'print:border-2 print:border-gray-800 print:font-bold' },
 ]
 
 export default function StudentAttendancePage() {
   const { isAdmin, teacherClassId, schoolName, schoolLogoUrl } = useRole()
   const { activeTerm, allTerms, selectedTerm } = useTerm()
-  const [date,         setDate]         = useState(today())
-  const [classId,      setClassId]      = useState('')
-  const [classes,      setClasses]      = useState<Class[]>([])
-  const [students,     setStudents]     = useState<Student[]>([])
-  const [records,      setRecords]      = useState<Map<string, AttendanceRecord>>(new Map())
-  const [loading,      setLoading]      = useState(false)
-  const [saving,       setSaving]       = useState(false)
-  const [nameSearch,   setNameSearch]   = useState('')
+  const [date, setDate] = useState(today())
+  const [classId, setClassId] = useState('')
+  const [classes, setClasses] = useState<Class[]>([])
+  const [students, setStudents] = useState<Student[]>([])
+  const [records, setRecords] = useState<Map<string, AttendanceRecord>>(new Map())
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [nameSearch, setNameSearch] = useState('')
   // History mode (search by year + term)
-  const [historyTerm,          setHistoryTerm]          = useState(selectedTerm?.id ?? '')
-  const [historyYear,          setHistoryYear]          = useState('')
-  const [historyData,          setHistoryData]          = useState<HistoryRecord[]>([])
-  const [historyLoading,       setHistoryLoading]       = useState(false)
+  const [historyTerm, setHistoryTerm] = useState(selectedTerm?.id ?? '')
+  const [historyYear, setHistoryYear] = useState('')
+  const [historyData, setHistoryData] = useState<HistoryRecord[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
   const [historyStudentSearch, setHistoryStudentSearch] = useState('')
-  const [historySummaryMode,   setHistorySummaryMode]   = useState(false)
+  const [historySummaryMode, setHistorySummaryMode] = useState(false)
   const supabase = createClient()
 
   const isHistoryMode = !!(historyTerm || historyYear)
@@ -113,10 +113,10 @@ export default function StudentAttendancePage() {
       .select('*, students(full_name, admission_number)')
       .order('attendance_date', { ascending: false })
 
-    if (historyTerm)                query = query.eq('term_id', historyTerm)
+    if (historyTerm) query = query.eq('term_id', historyTerm)
     else if (historyYear) {
       query = query.gte('attendance_date', `${historyYear}-01-01`)
-                   .lte('attendance_date', `${historyYear}-12-31`)
+        .lte('attendance_date', `${historyYear}-12-31`)
     }
     if (classId) {
       // filter by class via subquery is complex; instead filter client-side after
@@ -130,7 +130,7 @@ export default function StudentAttendancePage() {
   function setStatus(studentId: string, status: AttendanceStatus) {
     setRecords((prev) => {
       const next = new Map(prev)
-      const cur  = next.get(studentId)
+      const cur = next.get(studentId)
       next.set(studentId, { ...cur!, status })
       return next
     })
@@ -152,13 +152,13 @@ export default function StudentAttendancePage() {
     const { data: me } = await supabase.from('users').select('school_id').eq('id', user!.id).single()
 
     const rows = Array.from(records.values()).map((r) => ({
-      school_id:       me!.school_id,
-      student_id:      r.student_id,
+      school_id: me!.school_id,
+      student_id: r.student_id,
       attendance_date: date,
-      status:          r.status,
-      notes:           r.notes || null,
-      marked_by:       user!.id,
-      term_id:         activeTerm?.id ?? null,
+      status: r.status,
+      notes: r.notes || null,
+      marked_by: user!.id,
+      term_id: activeTerm?.id ?? null,
     }))
 
     const { error } = await supabase
@@ -212,8 +212,8 @@ export default function StudentAttendancePage() {
 
   const counts = {
     present: Array.from(records.values()).filter((r) => r.status === 'present').length,
-    absent:  Array.from(records.values()).filter((r) => r.status === 'absent').length,
-    late:    Array.from(records.values()).filter((r) => r.status === 'late').length,
+    absent: Array.from(records.values()).filter((r) => r.status === 'absent').length,
+    late: Array.from(records.values()).filter((r) => r.status === 'late').length,
     excused: Array.from(records.values()).filter((r) => r.status === 'excused').length,
   }
 
@@ -234,8 +234,8 @@ export default function StudentAttendancePage() {
 
   const historyCounts = {
     present: filteredHistory.filter(r => r.status === 'present').length,
-    absent:  filteredHistory.filter(r => r.status === 'absent').length,
-    late:    filteredHistory.filter(r => r.status === 'late').length,
+    absent: filteredHistory.filter(r => r.status === 'absent').length,
+    late: filteredHistory.filter(r => r.status === 'late').length,
     excused: filteredHistory.filter(r => r.status === 'excused').length,
   }
 
@@ -385,7 +385,9 @@ export default function StudentAttendancePage() {
                   <TableSkeleton rows={8} cols={8} />
                 ) : studentSummary.length === 0 ? (
                   <tr><td colSpan={8}>
-                    <EmptyState icon={<span>📋</span>} title="No attendance records found" description="No records match the selected filters" />
+                    <EmptyState
+                      //  icon={<span>📋</span>}
+                      title="No attendance records found" description="No records match the selected filters" />
                   </td></tr>
                 ) : (
                   studentSummary.map(row => {
@@ -427,7 +429,9 @@ export default function StudentAttendancePage() {
                   <TableSkeleton rows={8} cols={5} />
                 ) : filteredHistory.length === 0 ? (
                   <tr><td colSpan={5}>
-                    <EmptyState icon={<span>📋</span>} title="No attendance records found" description="No records match the selected filters" />
+                    <EmptyState
+                      //  icon={<span>📋</span>}
+                      title="No attendance records found" description="No records match the selected filters" />
                   </td></tr>
                 ) : (
                   filteredHistory.map((r) => (
@@ -439,9 +443,9 @@ export default function StudentAttendancePage() {
                         <span className={cn(
                           'px-2 py-0.5 text-xs rounded border font-medium',
                           r.status === 'present' ? 'bg-accent text-white border-accent' :
-                          r.status === 'absent'  ? 'bg-red-600 text-white border-red-600' :
-                          r.status === 'late'    ? 'bg-yellow-500 text-white border-yellow-500' :
-                          'bg-gray-500 text-white border-gray-500'
+                            r.status === 'absent' ? 'bg-red-600 text-white border-red-600' :
+                              r.status === 'late' ? 'bg-yellow-500 text-white border-yellow-500' :
+                                'bg-gray-500 text-white border-gray-500'
                         )}>
                           {r.status}
                         </span>
@@ -469,7 +473,9 @@ export default function StudentAttendancePage() {
             <tbody>
               {!classId ? (
                 <tr><td colSpan={4}>
-                  <EmptyState icon={<span>📋</span>} title="Select a class to begin" description="Choose a class from the filter above" />
+                  <EmptyState
+                    // icon={<span>📋</span>}
+                    title="Select a class to begin" description="Choose a class from the filter above" />
                 </td></tr>
               ) : loading ? (
                 <TableSkeleton rows={8} cols={4} />

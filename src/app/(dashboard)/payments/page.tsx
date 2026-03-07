@@ -30,19 +30,19 @@ type StudentOption = { id: string; full_name: string; class_name?: string | null
 export default function PaymentsPage() {
   const { schoolName, schoolLogoUrl, schoolAddress, schoolPhone, schoolEmail, isAdmin } = useRole()
   const { activeTerm, allTerms, selectedTerm } = useTerm()
-  const [payments,         setPayments]         = useState<PaymentWithStudent[]>([])
-  const [loading,          setLoading]          = useState(true)
-  const [search,           setSearch]           = useState('')
-  const [dateFrom,         setDateFrom]         = useState('')
-  const [dateTo,           setDateTo]           = useState(today())
-  const [termFilter,       setTermFilter]       = useState(selectedTerm?.id ?? '')
-  const [page,             setPage]             = useState(1)
-  const [total,            setTotal]            = useState(0)
-  const [receiptPayment,   setReceiptPayment]   = useState<{ payment: PaymentWithStudent; studentName: string; className?: string; outstanding?: number } | null>(null)
-  const [payModal,         setPayModal]         = useState(false)
-  const [studentSearch,    setStudentSearch]    = useState('')
-  const [studentResults,   setStudentResults]   = useState<StudentOption[]>([])
-  const [selectedStudent,  setSelectedStudent]  = useState<StudentOption | null>(null)
+  const [payments, setPayments] = useState<PaymentWithStudent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState(today())
+  const [termFilter, setTermFilter] = useState(selectedTerm?.id ?? '')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [receiptPayment, setReceiptPayment] = useState<{ payment: PaymentWithStudent; studentName: string; className?: string; outstanding?: number } | null>(null)
+  const [payModal, setPayModal] = useState(false)
+  const [studentSearch, setStudentSearch] = useState('')
+  const [studentResults, setStudentResults] = useState<StudentOption[]>([])
+  const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(null)
   const [studentSearching, setStudentSearching] = useState(false)
   const supabase = createClient()
 
@@ -55,9 +55,9 @@ export default function PaymentsPage() {
       .order('created_at', { ascending: false })
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
 
-    if (dateFrom)    query = query.gte('payment_date', dateFrom)
-    if (dateTo)      query = query.lte('payment_date', dateTo)
-    if (termFilter)  query = query.eq('term_id', termFilter)
+    if (dateFrom) query = query.gte('payment_date', dateFrom)
+    if (dateTo) query = query.lte('payment_date', dateTo)
+    if (termFilter) query = query.eq('term_id', termFilter)
 
     const { data, count, error } = await query
     if (error) toast.error(error.message)
@@ -109,9 +109,9 @@ export default function PaymentsPage() {
       .from('payments')
       .select('*, students(full_name, classes(name))')
       .order('payment_date', { ascending: false })
-      .order('created_at',   { ascending: false })
-    if (dateFrom)   query = query.gte('payment_date', dateFrom)
-    if (dateTo)     query = query.lte('payment_date', dateTo)
+      .order('created_at', { ascending: false })
+    if (dateFrom) query = query.gte('payment_date', dateFrom)
+    if (dateTo) query = query.lte('payment_date', dateTo)
     if (termFilter) query = query.eq('term_id', termFilter)
     const { data } = await query
     let results = (data ?? []) as PaymentWithStudent[]
@@ -136,7 +136,7 @@ export default function PaymentsPage() {
           <div><dt>Student</dt><dd>${p.students?.full_name ?? '—'}</dd></div>
           ${cls ? `<div><dt>Class</dt><dd>${cls}</dd></div>` : ''}
           ${termLabel ? `<div><dt>Term</dt><dd>${termLabel}</dd></div>` : ''}
-          <div><dt>Method</dt><dd style="text-transform:capitalize">${(p.payment_method ?? '—').replace('_',' ')}</dd></div>
+          <div><dt>Method</dt><dd style="text-transform:capitalize">${(p.payment_method ?? '—').replace('_', ' ')}</dd></div>
           ${p.notes ? `<div class="notes-row"><dt>Notes</dt><dd>${p.notes}</dd></div>` : ''}
         </dl>
         <div class="amount"><span>Amount Paid</span><b>${fmtCur(Number(p.amount_paid))}</b></div>
@@ -185,10 +185,10 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
       .eq('id', p.student_id)
       .single()
     setReceiptPayment({
-      payment:     p,
+      payment: p,
       studentName: p.students?.full_name ?? 'Unknown',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      className:   (p.students?.classes as any)?.name ?? undefined,
+      className: (p.students?.classes as any)?.name ?? undefined,
       outstanding: data ? Number(data.outstanding) : undefined,
     })
   }
@@ -254,7 +254,9 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
               <TableSkeleton rows={8} cols={7} />
             ) : payments.length === 0 ? (
               <tr><td colSpan={7}>
-                <EmptyState icon={<span>💳</span>} title="No payments found" description="Payments appear here after recording them on student pages" />
+                <EmptyState
+                  //  icon={<span>💳</span>} 
+                  title="No payments found" description="Payments appear here after recording them on student pages" />
               </td></tr>
             ) : (
               payments.map((p) => (
@@ -306,7 +308,7 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
       {/* Record Payment Modal */}
       <Modal open={payModal} onClose={() => setPayModal(false)} title="Record Payment">
         {!selectedStudent ? (
-          <div className="space-y-3">
+          <div className="space-y-3 min-h-96">
             <div className="relative">
               <label className="label">Search Student *</label>
               <SearchInput

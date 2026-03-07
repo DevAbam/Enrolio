@@ -24,17 +24,17 @@ const PAGE_SIZE = 10
 export default function StudentsPage() {
   const { isAdmin, teacherClassId } = useRole()
   const router = useRouter()
-  const [students,     setStudents]     = useState<StudentFeeSummary[]>([])
-  const [classes,      setClasses]      = useState<Class[]>([])
-  const [loading,      setLoading]      = useState(true)
-  const [search,       setSearch]       = useState('')
-  const [classFilter,  setClassFilter]  = useState('')
+  const [students, setStudents] = useState<StudentFeeSummary[]>([])
+  const [classes, setClasses] = useState<Class[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [classFilter, setClassFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [genderFilter, setGenderFilter] = useState('')
-  const [page,         setPage]         = useState(1)
-  const [total,        setTotal]        = useState(0)
-  const [selected,     setSelected]     = useState<Set<string>>(new Set())
-  const [payModal,     setPayModal]     = useState<StudentFeeSummary | null>(null)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [payModal, setPayModal] = useState<StudentFeeSummary | null>(null)
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -45,14 +45,14 @@ export default function StudentsPage() {
       .order('full_name')
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
 
-    if (search)       query = query.or(`full_name.ilike.%${search}%,admission_number.ilike.%${search}%`)
+    if (search) query = query.or(`full_name.ilike.%${search}%,admission_number.ilike.%${search}%`)
     if (genderFilter) query = query.eq('gender', genderFilter)
     const effectiveClass = !isAdmin && teacherClassId ? teacherClassId : classFilter
     if (effectiveClass) query = query.eq('class_id', effectiveClass)
     if (isAdmin) {
       if (statusFilter === 'has_balance') query = query.gt('outstanding', 0).eq('is_active', true)
-      if (statusFilter === 'fully_paid')  query = query.eq('outstanding', 0).eq('is_active', true)
-      if (statusFilter === 'inactive')    query = query.eq('is_active', false)
+      if (statusFilter === 'fully_paid') query = query.eq('outstanding', 0).eq('is_active', true)
+      if (statusFilter === 'inactive') query = query.eq('is_active', false)
     } else {
       query = query.eq('is_active', true)
     }
@@ -191,7 +191,7 @@ export default function StudentsPage() {
             ) : students.length === 0 ? (
               <tr><td colSpan={isAdmin ? 8 : 5}>
                 <EmptyState
-                  icon={<span>🎒</span>}
+                  // icon={<span>🎒</span>}
                   title="No students found"
                   description={hasFilters ? 'Try clearing your filters' : 'Add your first student to get started'}
                   action={hasFilters && isAdmin
@@ -233,8 +233,8 @@ export default function StudentsPage() {
                         {!s.is_active
                           ? <Badge variant="gray">Inactive</Badge>
                           : outstanding === 0
-                          ? <Badge variant="green">Paid</Badge>
-                          : <span className="font-medium text-red-600 dark:text-red-400">{formatCurrency(outstanding)}</span>
+                            ? <Badge variant="green">Paid</Badge>
+                            : <span className="font-medium text-red-600 dark:text-red-400">{formatCurrency(outstanding)}</span>
                         }
                       </td>
                     )}

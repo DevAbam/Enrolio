@@ -1,12 +1,11 @@
 'use client'
 import Link from 'next/link'
-import { usePathname, useRouter } from 'next/navigation'
+import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, UserCheck, BookOpen,
-  CreditCard, ClipboardList, MessageSquare, GraduationCap, X, LogOut, Banknote, CalendarDays
+  CreditCard, ClipboardList, MessageSquare, GraduationCap, X, Banknote, CalendarDays, Settings
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
-import { createClient } from '@/lib/supabase/client'
 import type { UserRole } from '@/types'
 
 interface SidebarProps {
@@ -61,14 +60,6 @@ const allNavSections: { label: string; items: NavItem[] }[] = [
 
 export function Sidebar({ schoolName, adminName, role, mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname()
-  const router = useRouter()
-  const supabase = createClient()
-
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
-  }
 
   const navSections = allNavSections
     .map((section) => ({
@@ -119,8 +110,8 @@ export function Sidebar({ schoolName, adminName, role, mobileOpen = false, onMob
         ))}
       </nav>
 
-      <div className="px-3 py-4 space-y-3 border-t border-border">
-        <div className="px-2">
+      <div className="px-3 py-4 space-y-2 border-t border-border">
+        <div className="px-2 mb-1">
           {schoolName && (
             <p className="font-medium text-fg text-sm truncate">{schoolName}</p>
           )}
@@ -131,10 +122,21 @@ export function Sidebar({ schoolName, adminName, role, mobileOpen = false, onMob
             <p className="text-xs text-accent-fg capitalize mt-0.5">{role}</p>
           )}
         </div>
-        <button onClick={handleLogout} className="btn-ghost text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 w-full justify-start">
-          <LogOut size={16} />
-          Logout
-        </button>
+        {role === 'admin' && (
+          <Link
+            href="/settings"
+            onClick={onMobileClose}
+            className={cn(
+              'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors duration-150 w-full',
+              pathname.startsWith('/settings')
+                ? 'bg-accent text-white font-medium'
+                : 'text-fg-muted hover:bg-surface-alt hover:text-fg'
+            )}
+          >
+            <Settings size={16} />
+            Settings
+          </Link>
+        )}
       </div>
     </div>
   )

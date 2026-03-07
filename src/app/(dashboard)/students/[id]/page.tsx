@@ -10,6 +10,7 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/client'
 import { useRole } from '@/contexts/RoleContext'
 import { useTerm } from '@/lib/term-context'
+import { ImageUpload } from '@/components/ui/ImageUpload'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Modal } from '@/components/ui/Modal'
@@ -50,8 +51,8 @@ export default function StudentDetailPage() {
   const { id }          = useParams<{ id: string }>()
   const searchParams    = useSearchParams()
   const router          = useRouter()
-  const { isAdmin, schoolName } = useRole()
-  const { activeTerm }  = useTerm()
+  const { isAdmin, schoolName, schoolLogoUrl, schoolAddress, schoolPhone, schoolEmail } = useRole()
+  const { activeTerm, selectedTerm, allTerms } = useTerm()
   const [student, setStudent]           = useState<StudentWithExtras | null>(null)
   const [payments, setPayments]         = useState<Payment[]>([])
   const [classes,  setClasses]          = useState<Class[]>([])
@@ -65,16 +66,18 @@ export default function StudentDetailPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
+    let paymentsQuery = supabase.from('payments').select('*').eq('student_id', id).order('payment_date', { ascending: false })
+    if (selectedTerm?.id) paymentsQuery = paymentsQuery.eq('term_id', selectedTerm.id)
     const [{ data: s }, { data: p }, { data: cls }] = await Promise.all([
       supabase.from('student_fee_summary').select('*').eq('id', id).single(),
-      supabase.from('payments').select('*').eq('student_id', id).order('payment_date', { ascending: false }),
+      paymentsQuery,
       supabase.from('classes').select('*').order('level', { ascending: true, nullsFirst: false }).order('name'),
     ])
     setStudent(s as StudentWithExtras)
     setPayments(p ?? [])
     setClasses(cls ?? [])
     setLoading(false)
-  }, [supabase, id])
+  }, [supabase, id, selectedTerm?.id])
 
   useEffect(() => { load() }, [load])
 
@@ -168,17 +171,50 @@ export default function StudentDetailPage() {
         <Button variant="ghost" size="sm" icon={<ArrowLeft size={14} />}>Students</Button>
       </Link>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left — Student Info */}
-        <div className="card p-5">
-          <div className="flex items-start justify-between mb-4">
-            <h2 className="text-xl font-bold text-fg">{student.full_name}</h2>
-            {isAdmin && (
-              <Button variant="secondary" size="sm" icon={<Pencil size={14} />} onClick={() => setEditModal(true)}>
-                Edit
-              </Button>
+      {/* Top row: Photo | Student Info | Fee Summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_1fr] gap-6">
+
+        {/* Photo / Profile Card */}
+        <div className="card p-5 flex flex-col items-center text-center gap-4">
+          <ImageUpload
+            currentUrl={student.photo_url}
+            folder="SchoolOps/students"
+            initials={student.full_name.charAt(0).toUpperCase()}
+            size={160}
+            shape="square"
+            disabled={!isAdmin}
+            onUpload={async (url) => {
+              await supabase.from('students').update({ photo_url: url }).eq('id', id)
+              setStudent(prev => prev ? { ...prev, photo_url: url } : prev)
+            }}
+          />
+          <div className="w-full">
+            <h2 className="text-lg font-bold text-fg leading-tight">{student.full_name}</h2>
+            {student.class_name && (
+              <p className="text-sm text-fg-muted mt-1">{student.class_name}</p>
             )}
+            <div className="mt-2 flex justify-center">
+              <Badge variant={student.is_active ? 'green' : 'gray'}>
+                {student.is_active ? 'Active' : 'Inactive'}
+              </Badge>
+            </div>
           </div>
+          {isAdmin && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Pencil size={14} />}
+              onClick={() => setEditModal(true)}
+              className="w-full justify-center"
+            >
+              Edit
+            </Button>
+          )}
+        </div>
+
+        {/* Student Information Card */}
+        <div className="card p-5">
+          <h3 className="font-semibold text-fg border-b border-border pb-2 mb-4">Student Information</h3>
           <dl className="space-y-3 text-sm">
             <div className="flex justify-between">
               <dt className="text-gray-500">Class</dt>
@@ -204,56 +240,10 @@ export default function StudentDetailPage() {
               <dt className="text-gray-500">Year Admitted</dt>
               <dd className="font-medium">{yearAdmitted ?? '—'}</dd>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Status</dt>
-              <dd><Badge variant={student.is_active ? 'green' : 'gray'}>{student.is_active ? 'Active' : 'Inactive'}</Badge></dd>
-            </div>
           </dl>
-
-          <div className="border-t border-border my-4" />
-
-          <h3 className="text-sm font-semibold text-fg mb-3">Parent / Guardian</h3>
-          <dl className="space-y-3 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Name</dt>
-              <dd className="font-medium">{student.parent_name ?? '—'}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Phone</dt>
-              <dd className="font-medium">{student.parent_phone ?? '—'}</dd>
-            </div>
-          </dl>
-
-          {/* Promotion buttons */}
-          {isAdmin && student.class_id && (
-            <>
-              <div className="border-t border-border my-4" />
-              <h3 className="text-sm font-semibold text-fg mb-3">Promotion</h3>
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  icon={<ChevronUp size={14} />}
-                  onClick={() => promote('up')}
-                  loading={promoting}
-                >
-                  Promote
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  icon={<ChevronDown size={14} />}
-                  onClick={() => promote('down')}
-                  loading={promoting}
-                >
-                  Demote
-                </Button>
-              </div>
-            </>
-          )}
         </div>
 
-        {/* Right — Fee Summary */}
+        {/* Fee Summary Card */}
         <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="section-title">Fee Summary</h2>
@@ -272,6 +262,12 @@ export default function StudentDetailPage() {
                 {Number(student.discount_amount) > 0 ? `-${formatCurrency(Number(student.discount_amount))}` : '—'}
               </span>
             </div>
+            {Number(student.carried_over_balance) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">Carried Forward Balance</span>
+                <span className="font-semibold text-red-500">+{formatCurrency(Number(student.carried_over_balance))}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-gray-500">Total Owed</span>
               <span className="font-semibold">{formatCurrency(Number(student.total_owed))}</span>
@@ -307,10 +303,59 @@ export default function StudentDetailPage() {
         </div>
       </div>
 
+      {/* Bottom row: Parent/Guardian + Promotion */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Parent / Guardian */}
+        <div className="card p-5">
+          <h3 className="font-semibold text-fg border-b border-border pb-2 mb-4">Parent / Guardian</h3>
+          <dl className="space-y-3 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Name</dt>
+              <dd className="font-medium">{student.parent_name ?? '—'}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Phone</dt>
+              <dd className="font-medium">{student.parent_phone ?? '—'}</dd>
+            </div>
+          </dl>
+        </div>
+
+        {/* Promotion */}
+        {isAdmin && student.class_id && (
+          <div className="card p-5">
+            <h3 className="font-semibold text-fg border-b border-border pb-2 mb-4">Promotion</h3>
+            <p className="text-sm text-fg-muted mb-4">Move this student to a higher or lower class level.</p>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<ChevronUp size={14} />}
+                onClick={() => promote('up')}
+                loading={promoting}
+              >
+                Promote
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<ChevronDown size={14} />}
+                onClick={() => promote('down')}
+                loading={promoting}
+              >
+                Demote
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Payment History */}
       <div className="card overflow-hidden">
-        <div className="px-5 py-4 border-b border-border">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <h2 className="section-title">Payment History</h2>
+          {selectedTerm && (
+            <span className="text-xs bg-accent-bg text-accent px-2 py-0.5 rounded-full">{selectedTerm.label}</span>
+          )}
         </div>
         <Table>
           <thead>
@@ -360,7 +405,6 @@ export default function StudentDetailPage() {
         <PaymentForm
           studentId={id}
           outstanding={outstanding}
-          termId={activeTerm?.id}
           onSuccess={() => { setPayModal(false); load() }}
           onCancel={() => setPayModal(false)}
         />
@@ -373,7 +417,12 @@ export default function StudentDetailPage() {
           studentName={student.full_name}
           className={student.class_name ?? undefined}
           schoolName={schoolName ?? 'School'}
+          schoolLogoUrl={schoolLogoUrl ?? undefined}
+          schoolAddress={schoolAddress ?? undefined}
+          schoolPhone={schoolPhone ?? undefined}
+          schoolEmail={schoolEmail ?? undefined}
           outstanding={outstanding}
+          termLabel={allTerms.find(t => t.id === receiptPayment.term_id)?.label}
           onClose={() => setReceiptPayment(null)}
         />
       )}

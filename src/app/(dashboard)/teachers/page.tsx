@@ -27,6 +27,7 @@ const teacherSchema = z.object({
   email:           z.string().email('Invalid email').optional().or(z.literal('')),
   employee_number: z.string().optional(),
   gender:          z.enum(['male', 'female', 'other', '']).optional(),
+  date_of_birth:   z.string().optional(),
   class_id:        z.string().optional(),
 })
 type TeacherForm = z.infer<typeof teacherSchema>
@@ -104,13 +105,13 @@ export default function TeachersPage() {
 
   function openAdd() {
     setEditing(null)
-    reset({ full_name: '', phone: '', email: '', employee_number: '', gender: '', class_id: '' })
+    reset({ full_name: '', phone: '', email: '', employee_number: '', gender: '', date_of_birth: '', class_id: '' })
     setModal(true)
   }
 
   function openEdit(t: TeacherWithUser) {
     setEditing(t)
-    reset({ full_name: t.full_name, phone: t.phone ?? '', email: t.email ?? '', employee_number: t.employee_number ?? '', gender: (t.gender as 'male' | 'female' | 'other' | '') ?? '', class_id: t.class_id ?? '' })
+    reset({ full_name: t.full_name, phone: t.phone ?? '', email: t.email ?? '', employee_number: t.employee_number ?? '', gender: (t.gender as 'male' | 'female' | 'other' | '') ?? '', date_of_birth: (t as Teacher & { date_of_birth?: string }).date_of_birth ?? '', class_id: t.class_id ?? '' })
     setModal(true)
   }
 
@@ -131,6 +132,7 @@ export default function TeachersPage() {
       email:           values.email || null,
       employee_number: values.employee_number || null,
       gender:          values.gender || null,
+      date_of_birth:   values.date_of_birth || null,
       class_id:        values.class_id || null,
     }
     if (editing) {
@@ -335,14 +337,20 @@ export default function TeachersPage() {
             <label className="label">Employee Number</label>
             <input className="input" placeholder="EMP-001" {...register('employee_number')} />
           </div>
-          <div>
-            <label className="label">Gender</label>
-            <select className="input" {...register('gender')}>
-              <option value="">— Select —</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Gender</label>
+              <select className="input" {...register('gender')}>
+                <option value="">— Select —</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Date of Birth</label>
+              <input type="date" className="input" {...register('date_of_birth')} />
+            </div>
           </div>
           {editing && (
             <div>

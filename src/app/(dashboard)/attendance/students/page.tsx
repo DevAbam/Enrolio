@@ -38,8 +38,8 @@ const statuses: { value: AttendanceStatus; label: string; activeClass: string; p
 ]
 
 export default function StudentAttendancePage() {
-  const { isAdmin, teacherClassId, schoolName } = useRole()
-  const { activeTerm, allTerms } = useTerm()
+  const { isAdmin, teacherClassId, schoolName, schoolLogoUrl } = useRole()
+  const { activeTerm, allTerms, selectedTerm } = useTerm()
   const [date,         setDate]         = useState(today())
   const [classId,      setClassId]      = useState('')
   const [classes,      setClasses]      = useState<Class[]>([])
@@ -49,7 +49,7 @@ export default function StudentAttendancePage() {
   const [saving,       setSaving]       = useState(false)
   const [nameSearch,   setNameSearch]   = useState('')
   // History mode (search by year + term)
-  const [historyTerm,          setHistoryTerm]          = useState('')
+  const [historyTerm,          setHistoryTerm]          = useState(selectedTerm?.id ?? '')
   const [historyYear,          setHistoryYear]          = useState('')
   const [historyData,          setHistoryData]          = useState<HistoryRecord[]>([])
   const [historyLoading,       setHistoryLoading]       = useState(false)
@@ -62,6 +62,12 @@ export default function StudentAttendancePage() {
   useEffect(() => {
     if (!isAdmin && teacherClassId) setClassId(teacherClassId)
   }, [isAdmin, teacherClassId])
+
+  // Sync history term filter when global selected term changes
+  useEffect(() => {
+    setHistoryTerm(selectedTerm?.id ?? '')
+    setHistoryYear('')
+  }, [selectedTerm?.id])
 
   useEffect(() => {
     if (isAdmin) {
@@ -319,14 +325,25 @@ export default function StudentAttendancePage() {
 
       {/* Print-only header */}
       <div className="print-only hidden">
-        <h1 className="text-lg font-bold">{schoolName}</h1>
-        <h2 className="text-base font-semibold mt-1">Student Attendance Report</h2>
-        <p className="text-sm text-gray-600 mt-0.5">
-          {isHistoryMode
-            ? allTerms.find(t => t.id === historyTerm)?.label ?? `Year ${historyYear}`
-            : `Date: ${formatDate(date)}${selectedClass ? ` · Class: ${selectedClass.name}` : ''}`
-          }
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+          <div>
+            <h1 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>{schoolName}</h1>
+            <h2 style={{ fontSize: '13px', fontWeight: '600', margin: '4px 0 0' }}>Student Attendance Report</h2>
+            <p style={{ fontSize: '11px', color: '#555', margin: '2px 0 0' }}>
+              {isHistoryMode
+                ? allTerms.find(t => t.id === historyTerm)?.label ?? `Year ${historyYear}`
+                : `Date: ${formatDate(date)}${selectedClass ? ` · Class: ${selectedClass.name}` : ''}`
+              }
+            </p>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            {schoolLogoUrl
+              ? <img src={schoolLogoUrl} alt={schoolName ?? ''} style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', display: 'block' }} />
+              : <div style={{ width: '56px', height: '56px', borderRadius: '8px', background: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: 'bold', color: '#374151' }}>{schoolName?.charAt(0) ?? 'S'}</div>
+            }
+          </div>
+        </div>
+        <hr style={{ borderTop: '1px solid #ccc', marginBottom: '8px' }} />
       </div>
 
       {isHistoryMode ? (

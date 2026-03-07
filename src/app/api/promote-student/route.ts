@@ -16,10 +16,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'studentId and targetClassId are required.' }, { status: 400 })
   }
 
-  const { error } = await supabase
-    .from('students')
-    .update({ class_id: targetClassId })
-    .eq('id', studentId)
+  const { error } = await supabase.rpc('promote_students', {
+    p_student_ids:     [studentId],
+    p_target_class_id: targetClassId,
+  })
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })

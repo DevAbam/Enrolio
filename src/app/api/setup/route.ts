@@ -12,8 +12,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'School already set up. Please sign in.' }, { status: 403 })
   }
 
-  const { schoolName, adminName, email, password } = await req.json() as {
+  const { schoolName, adminName, email, password, logoUrl, schoolAddress, schoolPhone, schoolEmail } = await req.json() as {
     schoolName: string; adminName: string; email: string; password: string
+    logoUrl?: string; schoolAddress?: string; schoolPhone?: string; schoolEmail?: string
   }
 
   if (!schoolName || !adminName || !email || !password) {
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest) {
   // 1. Create school
   const { data: school, error: schoolErr } = await admin
     .from('schools')
-    .insert({ name: schoolName })
+    .insert({ name: schoolName, logo_url: logoUrl || null, address: schoolAddress || null, phone: schoolPhone || null, email: schoolEmail || null })
     .select('id')
     .single()
 

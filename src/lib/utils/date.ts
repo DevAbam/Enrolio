@@ -6,6 +6,16 @@ export function formatDate(date: string | Date): string {
   }).format(new Date(date))
 }
 
+export function formatDateTime(date: string | Date): string {
+  return new Intl.DateTimeFormat('en-GH', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(date))
+}
+
 export function today(): string {
   return new Date().toISOString().split('T')[0]
 }

@@ -9,8 +9,10 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
 import { today } from '@/lib/utils/date'
 import { formatCurrency } from '@/lib/utils/currency'
+import { useTerm } from '@/lib/term-context'
 
 const schema = z.object({
+  term_id:        z.string().optional(),
   amount_paid:    z.coerce.number().min(0.01, 'Amount must be greater than 0'),
   payment_date:   z.string().min(1, 'Date is required'),
   payment_method: z.enum(['cash', 'bank_transfer', 'momo', 'card', 'other']).optional(),
@@ -22,25 +24,25 @@ type FormData = z.infer<typeof schema>
 interface PaymentFormProps {
   studentId:   string
   outstanding: number
-  termId?:     string | null
   onSuccess:   () => void
   onCancel:    () => void
 }
 
-export function PaymentForm({ studentId, outstanding, termId, onSuccess, onCancel }: PaymentFormProps) {
+export function PaymentForm({ studentId, outstanding, onSuccess, onCancel }: PaymentFormProps) {
   const supabase = createClient()
+  const { allTerms, activeTerm } = useTerm()
 
   const { register, handleSubmit, watch, reset, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { payment_date: today() },
+    defaultValues: { payment_date: today(), term_id: activeTerm?.id ?? '' },
   })
 
   const amount = watch('amount_paid')
   const isOverpayment = Number(amount) > outstanding && outstanding > 0
 
   useEffect(() => {
-    reset({ payment_date: today() })
-  }, [reset])
+    reset({ payment_date: today(), term_id: activeTerm?.id ?? '' })
+  }, [reset, activeTerm?.id])
 
   async function onSubmit(values: FormData) {
     const { data: { user } } = await supabase.auth.getUser()
@@ -57,7 +59,7 @@ export function PaymentForm({ studentId, outstanding, termId, onSuccess, onCance
       receipt_number: receipt,
       notes:          values.notes || null,
       recorded_by:    user!.id,
-      term_id:        termId ?? null,
+      term_id:        values.term_id || null,
     })
 
     if (error) {
@@ -70,6 +72,20 @@ export function PaymentForm({ studentId, outstanding, termId, onSuccess, onCance
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {allTerms.length > 0 && (
+        <div>
+          <label className="label">Term</label>
+          <select className="input" {...register('term_id')}>
+            <option value="">— No term —</option>
+            {allTerms.map(t => (
+              <option key={t.id} value={t.id}>
+                {t.label}{t.is_active ? ' (active)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div>
         <label className="label">Amount (GHS) *</label>
         <input

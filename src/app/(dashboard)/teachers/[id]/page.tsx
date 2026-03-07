@@ -5,12 +5,13 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { ArrowLeft, Pencil, Lock, KeyRound, User, Phone, Mail, Hash, Calendar, GraduationCap, BadgeCheck } from 'lucide-react'
+import { ArrowLeft, Pencil, Lock, KeyRound } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRole } from '@/contexts/RoleContext'
 import { Modal } from '@/components/ui/Modal'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { ImageUpload } from '@/components/ui/ImageUpload'
 
 const teacherSchema = z.object({
   full_name:       z.string().min(1, 'Full name is required'),
@@ -18,6 +19,7 @@ const teacherSchema = z.object({
   email:           z.string().email('Invalid email').optional().or(z.literal('')),
   employee_number: z.string().optional(),
   gender:          z.enum(['male', 'female', 'other', '']).optional(),
+  date_of_birth:   z.string().optional(),
   notes:           z.string().optional(),
   class_id:        z.string().optional(),
 })
@@ -33,6 +35,7 @@ type TeacherDetail = {
   email: string | null; employee_number: string | null; gender: string | null
   is_active: boolean; user_id: string | null; class_id: string | null
   temp_password: string | null; notes: string | null; created_at: string
+  date_of_birth: string | null; photo_url: string | null
 }
 
 export default function TeacherDetailPage() {
@@ -80,6 +83,7 @@ export default function TeacherDetailPage() {
       email:           teacher.email ?? '',
       employee_number: teacher.employee_number ?? '',
       gender:          (teacher.gender as 'male' | 'female' | 'other' | '') ?? '',
+      date_of_birth:   teacher.date_of_birth ?? '',
       notes:           teacher.notes ?? '',
     })
     setEditModal(true)
@@ -92,6 +96,7 @@ export default function TeacherDetailPage() {
       email:           values.email || null,
       employee_number: values.employee_number || null,
       gender:          values.gender || null,
+      date_of_birth:   values.date_of_birth || null,
       notes:           values.notes || null,
     }).eq('id', id)
     if (error) { toast.error(error.message); return }
@@ -135,6 +140,7 @@ export default function TeacherDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header — back + name + action buttons (no inline avatar) */}
       <div className="flex items-center gap-3">
         <button onClick={() => router.back()} className="btn-ghost p-2 -ml-2" title="Back">
           <ArrowLeft size={18} />
@@ -155,113 +161,109 @@ export default function TeacherDetailPage() {
         )}
       </div>
 
+      {/* Top row: Photo | Personal Info | Employment Details */}
+      <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr_1fr] gap-6">
+
+        {/* Photo / Profile Card */}
+        <div className="card p-5 flex flex-col items-center text-center gap-4">
+          <ImageUpload
+            currentUrl={teacher.photo_url}
+            folder="SchoolOps/teachers"
+            initials={teacher.full_name.charAt(0).toUpperCase()}
+            size={160}
+            shape="square"
+            disabled={!isAdmin}
+            onUpload={async (url) => {
+              await supabase.from('teachers').update({ photo_url: url }).eq('id', id)
+              setTeacher(prev => prev ? { ...prev, photo_url: url } : prev)
+            }}
+          />
+          <div className="w-full">
+            <h3 className="text-base font-bold text-fg leading-tight">{teacher.full_name}</h3>
+            {className && (
+              <p className="text-sm text-fg-muted mt-1">{className}</p>
+            )}
+            <div className="mt-2 flex justify-center gap-2 flex-wrap">
+              <Badge variant={teacher.is_active ? 'green' : 'gray'}>
+                {teacher.is_active ? 'Active' : 'Inactive'}
+              </Badge>
+            </div>
+            {isAdmin && (
+              <button onClick={toggleActive} className="text-xs text-fg-muted underline mt-2">
+                {teacher.is_active ? 'Deactivate' : 'Activate'}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Personal Information */}
+        <div className="card p-5">
+          <h3 className="font-semibold text-fg border-b border-border pb-2 mb-4">Personal Information</h3>
+          <dl className="space-y-3 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Full Name</dt>
+              <dd className="font-medium text-fg">{teacher.full_name}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Gender</dt>
+              <dd className="font-medium text-fg capitalize">{teacher.gender ?? '—'}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Date of Birth</dt>
+              <dd className="font-medium text-fg">{teacher.date_of_birth ?? '—'}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Phone</dt>
+              <dd className="font-medium text-fg">{teacher.phone ?? '—'}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Email</dt>
+              <dd className="font-medium text-fg">{teacher.email ?? '—'}</dd>
+            </div>
+          </dl>
+        </div>
+
+        {/* Employment Details */}
+        <div className="card p-5">
+          <h3 className="font-semibold text-fg border-b border-border pb-2 mb-4">Employment Details</h3>
+          <dl className="space-y-3 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Employee Number</dt>
+              <dd className="font-medium text-fg">{teacher.employee_number ?? '—'}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Year Employed</dt>
+              <dd className="font-medium text-fg">{yearEmployed}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-gray-500">Assigned Class</dt>
+              <dd className="font-medium text-fg">{className ?? '—'}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      {/* Bottom row: Login Account | Notes */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Personal Info */}
-        <div className="card p-5 space-y-4">
-          <h3 className="font-semibold text-fg border-b border-border pb-2">Personal Information</h3>
-
-          <div className="flex items-start gap-3">
-            <User size={16} className="text-fg-subtle mt-0.5" />
-            <div>
-              <p className="text-xs text-fg-muted">Full Name</p>
-              <p className="text-fg font-medium">{teacher.full_name}</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <GraduationCap size={16} className="text-fg-subtle mt-0.5" />
-            <div>
-              <p className="text-xs text-fg-muted">Gender</p>
-              <p className="text-fg capitalize">{teacher.gender ?? '—'}</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <Phone size={16} className="text-fg-subtle mt-0.5" />
-            <div>
-              <p className="text-xs text-fg-muted">Phone</p>
-              <p className="text-fg">{teacher.phone ?? '—'}</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <Mail size={16} className="text-fg-subtle mt-0.5" />
-            <div>
-              <p className="text-xs text-fg-muted">Email</p>
-              <p className="text-fg">{teacher.email ?? '—'}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Employment Info */}
-        <div className="card p-5 space-y-4">
-          <h3 className="font-semibold text-fg border-b border-border pb-2">Employment Details</h3>
-
-          <div className="flex items-start gap-3">
-            <Hash size={16} className="text-fg-subtle mt-0.5" />
-            <div>
-              <p className="text-xs text-fg-muted">Employee Number</p>
-              <p className="text-fg">{teacher.employee_number ?? '—'}</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <Calendar size={16} className="text-fg-subtle mt-0.5" />
-            <div>
-              <p className="text-xs text-fg-muted">Year Employed</p>
-              <p className="text-fg">{yearEmployed}</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <BadgeCheck size={16} className="text-fg-subtle mt-0.5" />
-            <div>
-              <p className="text-xs text-fg-muted">Assigned Class</p>
-              <p className="text-fg">{className ?? '—'}</p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-3">
-            <BadgeCheck size={16} className="text-fg-subtle mt-0.5" />
-            <div>
-              <p className="text-xs text-fg-muted">Status</p>
-              <div className="flex items-center gap-2 mt-0.5">
-                <Badge variant={teacher.is_active ? 'green' : 'gray'}>{teacher.is_active ? 'Active' : 'Inactive'}</Badge>
-                {isAdmin && (
-                  <button onClick={toggleActive} className="text-xs text-fg-muted underline">
-                    {teacher.is_active ? 'Deactivate' : 'Activate'}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Login Account */}
-        <div className="card p-5 space-y-4">
-          <h3 className="font-semibold text-fg border-b border-border pb-2">Login Account</h3>
+        <div className="card p-5">
+          <h3 className="font-semibold text-fg border-b border-border pb-2 mb-4">Login Account</h3>
           {teacher.user_id ? (
-            <>
-              <div className="flex items-start gap-3">
-                <KeyRound size={16} className="text-fg-subtle mt-0.5" />
-                <div>
-                  <p className="text-xs text-fg-muted">Login Email</p>
-                  <p className="text-fg">{loginEmail ?? '—'}</p>
-                </div>
+            <dl className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-gray-500">Login Email</dt>
+                <dd className="font-medium text-fg">{loginEmail ?? '—'}</dd>
               </div>
               {isAdmin && teacher.temp_password && (
-                <div className="flex items-start gap-3">
-                  <Lock size={16} className="text-fg-subtle mt-0.5" />
-                  <div>
-                    <p className="text-xs text-fg-muted">Last Assigned Password</p>
-                    <p className="text-fg font-mono">{teacher.temp_password}</p>
-                  </div>
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">Last Assigned Password</dt>
+                  <dd className="font-mono text-fg">{teacher.temp_password}</dd>
                 </div>
               )}
               {isAdmin && !teacher.temp_password && (
-                <p className="text-sm text-fg-muted">No password on record. Use &quot;Change Password&quot; to set one.</p>
+                <p className="text-fg-muted">No password on record. Use &quot;Change Password&quot; to set one.</p>
               )}
-            </>
+            </dl>
           ) : (
             <p className="text-sm text-fg-muted">No login account yet. Go to Teachers list to create one.</p>
           )}
@@ -306,6 +308,10 @@ export default function TeacherDetailPage() {
               <option value="female">Female</option>
               <option value="other">Other</option>
             </select>
+          </div>
+          <div>
+            <label className="label">Date of Birth</label>
+            <input type="date" className="input" {...register('date_of_birth')} />
           </div>
           <div>
             <label className="label">Notes</label>

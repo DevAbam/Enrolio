@@ -123,10 +123,10 @@ export default function ClassesPage() {
     const ids = Array.from(promoteSelected)
     if (ids.length === 0) { toast.error('No students selected.'); return }
     setPromoteSaving(true)
-    const { error } = await supabase
-      .from('students')
-      .update({ class_id: promoteModal.nextCls.id })
-      .in('id', ids)
+    const { error } = await supabase.rpc('promote_students', {
+      p_student_ids:     ids,
+      p_target_class_id: promoteModal.nextCls.id,
+    })
     if (error) { toast.error(error.message) }
     else { toast.success(`${ids.length} student${ids.length !== 1 ? 's' : ''} promoted to ${promoteModal.nextCls.name}`) }
     setPromoteSaving(false)

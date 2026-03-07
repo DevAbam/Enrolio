@@ -13,7 +13,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Pagination } from '@/components/ui/Pagination'
 import { Modal } from '@/components/ui/Modal'
 import { formatCurrency } from '@/lib/utils/currency'
-import { formatDate } from '@/lib/utils/date'
+import { formatDateTime } from '@/lib/utils/date'
 import { buildFeeReminderMessage } from '@/lib/sms/provider'
 import type { StudentFeeSummary, SmsLog } from '@/types'
 import { cn } from '@/lib/utils/cn'
@@ -56,6 +56,8 @@ function SMSPageInner() {
   const [selectedPackage, setSelectedPackage] = useState<CreditPackage | null>(null)
   const [sending,         setSending]         = useState(false)
   const [rechargeLoading, setRechargeLoading] = useState(false)
+  const [clearLogsOpen,   setClearLogsOpen]   = useState(false)
+  const [clearingLogs,    setClearingLogs]    = useState(false)
   const [logPage,       setLogPage]       = useState(1)
   const [logTotal,      setLogTotal]      = useState(0)
   const supabase = createClient()
@@ -174,6 +176,15 @@ function SMSPageInner() {
       next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
+  }
+
+  async function handleClearLogs() {
+    setClearingLogs(true)
+    const { error } = await supabase.from('sms_logs').delete().gte('created_at', '1970-01-01')
+    if (error) { toast.error('Failed to clear logs') }
+    else { setSmsLogs([]); setLogTotal(0); toast.success('SMS logs cleared') }
+    setClearingLogs(false)
+    setClearLogsOpen(false)
   }
 
   async function callSmsApi(
@@ -562,11 +573,16 @@ function SMSPageInner() {
 
       {/* SMS Log */}
       <div className="card overflow-hidden">
-        <div className="px-5 py-4 border-b border-border">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <h2 className="section-title flex items-center gap-2">
             <MessageSquare size={18} />
             Recent SMS Activity
           </h2>
+          {smsLogs.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => setClearLogsOpen(true)}>
+              Clear Logs
+            </Button>
+          )}
         </div>
         {smsLogs.length === 0 ? (
           <EmptyState icon={<MessageSquare size={48} className="text-fg-subtle" />} title="No SMS sent yet" description="Send your first message above" />
@@ -584,7 +600,7 @@ function SMSPageInner() {
             <tbody>
               {smsLogs.map((log) => (
                 <tr key={log.id}>
-                  <td className="text-xs text-fg-subtle">{formatDate(log.sent_at)}</td>
+                  <td className="text-xs text-fg-subtle">{formatDateTime(log.sent_at)}</td>
                   <td className="text-sm">
                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                     {(log as any).recipient_count > 1 ? `${(log as any).recipient_count} recipients` : log.parent_phone}
@@ -601,6 +617,17 @@ function SMSPageInner() {
           <Pagination page={logPage} pageSize={LOG_PAGE_SIZE} total={logTotal} onPageChange={setLogPage} />
         )}
       </div>
+
+      {/* Clear Logs Modal */}
+      <Modal open={clearLogsOpen} onClose={() => setClearLogsOpen(false)} title="Clear SMS Logs">
+        <div className="space-y-4">
+          <p className="text-sm text-fg">This will permanently delete all SMS activity logs for your school. This cannot be undone.</p>
+          <div className="flex gap-3 justify-end">
+            <Button variant="secondary" onClick={() => setClearLogsOpen(false)}>Cancel</Button>
+            <Button variant="danger" loading={clearingLogs} onClick={handleClearLogs}>Clear All Logs</Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Confirm Bulk SMS Modal */}
       <Modal open={confirmOpen} onClose={() => setConfirmOpen(false)} title="Confirm Bulk SMS">

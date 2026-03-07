@@ -292,6 +292,7 @@
   .attendance-status-btn:not(.is-selected-present):not(.is-selected-absent):not(.is-selected-late):not(.is-selected-excused) {
     background-color: white !important;
     color: #9ca3af !important;
+    border-color: transparent !important;
   }
 
   /* Receipt isolation */

@@ -8,7 +8,7 @@ import {
 import {
   Users, FileText, CheckCircle, AlertCircle,
   GraduationCap, UserCheck, MessageSquare, ClipboardList,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Cake,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
@@ -102,6 +102,49 @@ function AttBar({ label, icon, counts }: {
 
 interface AttendanceCounts { present: number; absent: number; total: number }
 
+// ─── BIRTHDAY HELPERS ─────────────────────────────────────────────────────────
+interface BirthdayEntry { id: string; name: string; days: number; type: 'student' | 'teacher' }
+
+function daysUntilBirthday(dob: string): number {
+  const now  = new Date(); now.setHours(0, 0, 0, 0)
+  const b    = new Date(dob + 'T00:00:00')
+  const next = new Date(now.getFullYear(), b.getMonth(), b.getDate())
+  if (next < now) next.setFullYear(now.getFullYear() + 1)
+  return Math.round((next.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+function BirthdayWidget({ entries, title }: { entries: BirthdayEntry[]; title?: string }) {
+  if (entries.length === 0) return null
+  return (
+    <div className="card p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Cake size={17} className="text-accent" />
+        <h3 className="section-title">{title ?? 'Upcoming Birthdays'}</h3>
+        <span className="ml-auto text-xs bg-accent-bg text-accent px-2 py-0.5 rounded-full">{entries.length}</span>
+      </div>
+      <ul className="space-y-2">
+        {entries.map((e) => (
+          <li key={`${e.type}-${e.id}`} className="flex items-center justify-between gap-3 text-sm">
+            <span className="font-medium text-fg truncate">{e.name}</span>
+            <div className="flex items-center gap-2 shrink-0">
+              {e.type === 'teacher' && (
+                <span className="text-[10px] bg-surface-alt border border-border text-fg-muted px-1.5 py-0.5 rounded">Teacher</span>
+              )}
+              <span className={
+                e.days === 0 ? 'text-xs font-bold text-accent' :
+                e.days === 1 ? 'text-xs font-semibold text-yellow-500' :
+                'text-xs text-fg-muted'
+              }>
+                {e.days === 0 ? 'Today!' : e.days === 1 ? 'Tomorrow' : `in ${e.days}d`}
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 // ─── TEACHER DASHBOARD ───────────────────────────────────────────────────────
 function TeacherDashboard() {
   const { fullName, teacherClassId } = useRole()
@@ -190,6 +233,16 @@ function TeacherDashboard() {
         />
       </div>
 
+      {/* Birthday widget — students only for teachers */}
+      {(() => {
+        const upcoming = students
+          .filter(s => s.date_of_birth)
+          .map(s => ({ id: s.id, name: s.full_name, days: daysUntilBirthday(s.date_of_birth!), type: 'student' as const }))
+          .filter(s => s.days <= 14)
+          .sort((a, b) => a.days - b.days)
+        return upcoming.length > 0 ? <BirthdayWidget entries={upcoming} title="Student Birthdays (next 14 days)" /> : null
+      })()}
+
       {/* Student list */}
       <div className="card overflow-hidden">
         <div className="px-5 py-4 border-b border-border">
@@ -239,9 +292,10 @@ function AdminDashboard() {
   const [teacherAtt, setTeacherAtt] = useState<AttendanceCounts>({ present: 0, absent: 0, total: 0 })
   const [monthlyRevenue, setMonthlyRevenue] = useState<MonthlyPoint[]>([])
   const [weeklyAtt, setWeeklyAtt] = useState<WeeklyAttPoint[]>([])
-  const [classFees, setClassFees] = useState<ClassFeePoint[]>([])
-  const [loading, setLoading] = useState(true)
-  const [chartYear, setChartYear] = useState(now.getFullYear())
+  const [classFees,  setClassFees]  = useState<ClassFeePoint[]>([])
+  const [birthdays,  setBirthdays]  = useState<BirthdayEntry[]>([])
+  const [loading,    setLoading]    = useState(true)
+  const [chartYear,  setChartYear]  = useState(now.getFullYear())
   const [weekOffset, setWeekOffset] = useState(0) // 0 = current week, 1 = prev week, etc.
   const supabase = createClient()
 
@@ -257,12 +311,16 @@ function AdminDashboard() {
         { data: sAtt },
         { data: tAtt },
         { data: allFees },
+        { data: sBirths },
+        { data: tBirths },
       ] = await Promise.all([
         supabase.from('school_revenue_summary').select('*').single(),
         supabase.from('student_fee_summary').select('*').gt('outstanding', 0).eq('is_active', true).order('outstanding', { ascending: false }).limit(20),
         supabase.from('student_attendance').select('status').eq('attendance_date', todayStr),
         supabase.from('teacher_attendance').select('status').eq('attendance_date', todayStr),
         supabase.from('student_fee_summary').select('class_name, total_paid, outstanding').eq('is_active', true),
+        supabase.from('students').select('id, full_name, date_of_birth').eq('is_active', true).not('date_of_birth', 'is', null),
+        supabase.from('teachers').select('id, full_name, date_of_birth').eq('is_active', true).not('date_of_birth', 'is', null),
       ])
 
       if (revErr && revErr.code !== 'PGRST116') toast.error('Error loading revenue')
@@ -283,6 +341,20 @@ function AdminDashboard() {
         classMap.set(name, { paid: ex.paid + Number(s.total_paid), outstanding: ex.outstanding + Number(s.outstanding) })
       })
       setClassFees(Array.from(classMap.entries()).map(([name, v]) => ({ name, ...v })))
+
+      // Birthday processing
+      const upcoming: BirthdayEntry[] = []
+      for (const s of sBirths ?? []) {
+        if (!s.date_of_birth) continue
+        const days = daysUntilBirthday(s.date_of_birth)
+        if (days <= 14) upcoming.push({ id: s.id, name: s.full_name, days, type: 'student' })
+      }
+      for (const t of tBirths ?? []) {
+        if (!t.date_of_birth) continue
+        const days = daysUntilBirthday(t.date_of_birth)
+        if (days <= 14) upcoming.push({ id: t.id, name: t.full_name, days, type: 'teacher' })
+      }
+      setBirthdays(upcoming.sort((a, b) => a.days - b.days))
 
       setLoading(false)
     }
@@ -552,6 +624,11 @@ function AdminDashboard() {
             </span>
           </div>
         </div>
+      )}
+
+      {/* ── Birthdays ───────────────────────────────────────────────────────── */}
+      {!loading && birthdays.length > 0 && (
+        <BirthdayWidget entries={birthdays} title="Upcoming Birthdays (next 14 days)" />
       )}
 
       {/* ── Row 5: Defaulters table ─────────────────────────────────────────── */}

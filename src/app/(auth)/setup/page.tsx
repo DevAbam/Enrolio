@@ -1,7 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff, Loader2, CheckCircle } from 'lucide-react'
+import { Eye, EyeOff, Loader2, CheckCircle, Camera } from 'lucide-react'
+import { ImageUpload } from '@/components/ui/ImageUpload'
 
 export default function SetupPage() {
   const [form, setForm] = useState({
@@ -9,7 +10,11 @@ export default function SetupPage() {
     adminName: '',
     email: '',
     password: '',
+    schoolAddress: '',
+    schoolPhone: '',
+    schoolEmail: '',
   })
+  const [logoUrl,  setLogoUrl]  = useState<string | null>(null)
   const [showPw,   setShowPw]   = useState(false)
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
@@ -28,7 +33,7 @@ export default function SetupPage() {
     const res = await fetch('/api/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, logoUrl }),
     })
 
     const data = await res.json()
@@ -60,8 +65,18 @@ export default function SetupPage() {
       <div className="w-full max-w-sm">
         <div className="card p-8">
           <div className="flex flex-col items-center mb-8">
-            <div className="h-12 w-12 rounded-full bg-accent text-white flex items-center justify-center text-xl font-bold mb-3">
-              S
+            <div className="mb-3 flex flex-col items-center gap-1">
+              <ImageUpload
+                currentUrl={logoUrl}
+                folder="SchoolOps/schools"
+                initials="S"
+                shape="circle"
+                size={64}
+                onUpload={(url) => setLogoUrl(url)}
+              />
+              <span className="text-xs text-fg-subtle flex items-center gap-1">
+                <Camera size={11} /> Upload logo (optional)
+              </span>
             </div>
             <h1 className="text-2xl font-bold text-fg">Set up your school</h1>
             <p className="text-sm text-fg-muted mt-1">Create your first admin account</p>
@@ -79,6 +94,43 @@ export default function SetupPage() {
                 onChange={(e) => update('schoolName', e.target.value)}
                 required
               />
+            </div>
+
+            <div>
+              <label className="label" htmlFor="schoolAddress">School Address</label>
+              <input
+                id="schoolAddress"
+                type="text"
+                className="input"
+                placeholder="123 Main Street, Accra"
+                value={form.schoolAddress}
+                onChange={(e) => update('schoolAddress', e.target.value)}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="label" htmlFor="schoolPhone">Phone</label>
+                <input
+                  id="schoolPhone"
+                  type="tel"
+                  className="input"
+                  placeholder="+233 20 000 0000"
+                  value={form.schoolPhone}
+                  onChange={(e) => update('schoolPhone', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="schoolEmail">School Email</label>
+                <input
+                  id="schoolEmail"
+                  type="email"
+                  className="input"
+                  placeholder="info@school.com"
+                  value={form.schoolEmail}
+                  onChange={(e) => update('schoolEmail', e.target.value)}
+                />
+              </div>
             </div>
 
             <div>

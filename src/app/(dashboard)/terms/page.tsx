@@ -81,16 +81,11 @@ export default function TermsPage() {
   }
 
   async function setActive(termId: string) {
+    if (!confirm('Activating this term will carry forward any outstanding balances from the current active term into the next term. Continue?')) return
     setSettingActive(termId)
-    // Deactivate all, then activate selected (UNIQUE partial index handles enforcement)
-    const { error: clearErr } = await supabase
-      .from('academic_terms')
-      .update({ is_active: false })
-      .neq('id', termId)
-    if (clearErr) { toast.error(clearErr.message); setSettingActive(null); return }
-    const { error } = await supabase.from('academic_terms').update({ is_active: true }).eq('id', termId)
+    const { error } = await supabase.rpc('activate_term_with_carryover', { p_new_term_id: termId })
     if (error) { toast.error(error.message); setSettingActive(null); return }
-    toast.success('Active term updated')
+    toast.success('Term activated — outstanding balances carried forward')
     reload()
     setSettingActive(null)
   }
@@ -134,6 +129,21 @@ export default function TermsPage() {
       loadTermFees(termId)
     }
   }
+
+  function openAddForYear(year: number) {
+    setEditingTerm(null)
+    setValue('year', year)
+    setValue('label', '')
+    setShowForm(true)
+  }
+
+  // Group terms by year (allTerms already sorted year DESC, term_number ASC)
+  const termsByYear = allTerms.reduce<Record<number, typeof allTerms>>((acc, t) => {
+    if (!acc[t.year]) acc[t.year] = []
+    acc[t.year].push(t)
+    return acc
+  }, {})
+  const sortedYears = Object.keys(termsByYear).map(Number).sort((a, b) => b - a)
 
   if (!isAdmin) {
     return <p className="text-fg-muted">Admin access required.</p>
@@ -191,65 +201,83 @@ export default function TermsPage() {
         </div>
       )}
 
-      <div className="space-y-2">
-        {allTerms.map(term => (
-          <div key={term.id} className="card p-0 overflow-hidden">
-            <div className="flex items-center gap-3 px-4 py-3">
+      <div className="space-y-6">
+        {sortedYears.map(year => (
+          <div key={year}>
+            {/* Year header */}
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h3 className="text-sm font-bold text-fg-muted uppercase tracking-wide">{year}</h3>
               <button
-                onClick={() => term.is_active ? undefined : setActive(term.id)}
-                disabled={settingActive === term.id}
-                title={term.is_active ? 'Active term' : 'Set as active'}
-                className={term.is_active ? 'text-accent' : 'text-fg-subtle hover:text-accent transition-colors'}
+                onClick={() => openAddForYear(year)}
+                className="btn-ghost flex items-center gap-1 text-xs py-1 px-2"
+                title={`Add a term to ${year}`}
               >
-                {term.is_active ? <CheckCircle size={20} /> : <Circle size={20} />}
+                <Plus size={13} /> Add Term
               </button>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-fg">{term.label}</p>
-                <p className="text-xs text-fg-muted">Year {term.year} · Term {term.term_number}</p>
-              </div>
-              {term.is_active && (
-                <span className="text-xs bg-accent-bg text-accent px-2 py-0.5 rounded-full font-medium">Active</span>
-              )}
-              <div className="flex items-center gap-1">
-                <button onClick={() => openEdit(term)} className="btn-ghost p-1.5" title="Edit"><Pencil size={14} /></button>
-                <button
-                  onClick={() => deleteTerm(term.id)}
-                  disabled={deletingTerm === term.id || term.is_active}
-                  className="btn-ghost p-1.5 text-red-500 disabled:opacity-40"
-                  title={term.is_active ? 'Cannot delete active term' : 'Delete'}
-                >
-                  <Trash2 size={14} />
-                </button>
-                <button onClick={() => toggleExpand(term.id)} className="btn-ghost p-1.5" title="Set class fees">
-                  {expandedTerm === term.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </button>
-              </div>
             </div>
 
-            {expandedTerm === term.id && (
-              <div className="border-t border-border px-4 py-3 bg-surface-alt">
-                <p className="text-sm font-medium text-fg mb-3">Class fee overrides for this term (leave blank to use default class fee)</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-                  {classes.map(cls => (
-                    <div key={cls.id}>
-                      <label className="block text-xs text-fg-muted mb-1">{cls.name} <span className="text-fg-subtle">(default: {cls.term_fee_amount})</span></label>
-                      <input
-                        type="number"
-                        className="input text-sm"
-                        placeholder={String(cls.term_fee_amount)}
-                        value={feeInputs[cls.id] ?? ''}
-                        onChange={e => setFeeInputs(prev => ({ ...prev, [cls.id]: e.target.value }))}
-                        min={0}
-                        step={0.01}
-                      />
+            <div className="space-y-2">
+              {termsByYear[year].map(term => (
+                <div key={term.id} className="card p-0 overflow-hidden">
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <button
+                      onClick={() => term.is_active ? undefined : setActive(term.id)}
+                      disabled={settingActive === term.id}
+                      title={term.is_active ? 'Active term' : 'Set as active'}
+                      className={term.is_active ? 'text-accent' : 'text-fg-subtle hover:text-accent transition-colors'}
+                    >
+                      {term.is_active ? <CheckCircle size={20} /> : <Circle size={20} />}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-fg">{term.label}</p>
+                      <p className="text-xs text-fg-muted">Term {term.term_number}</p>
                     </div>
-                  ))}
+                    {term.is_active && (
+                      <span className="text-xs bg-accent-bg text-accent px-2 py-0.5 rounded-full font-medium">Active</span>
+                    )}
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => openEdit(term)} className="btn-ghost p-1.5" title="Edit"><Pencil size={14} /></button>
+                      <button
+                        onClick={() => deleteTerm(term.id)}
+                        disabled={deletingTerm === term.id || term.is_active}
+                        className="btn-ghost p-1.5 text-red-500 disabled:opacity-40"
+                        title={term.is_active ? 'Cannot delete active term' : 'Delete'}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                      <button onClick={() => toggleExpand(term.id)} className="btn-ghost p-1.5" title="Set class fees">
+                        {expandedTerm === term.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {expandedTerm === term.id && (
+                    <div className="border-t border-border px-4 py-3 bg-surface-alt">
+                      <p className="text-sm font-medium text-fg mb-3">Class fee overrides for this term (leave blank to use default class fee)</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                        {classes.map(cls => (
+                          <div key={cls.id}>
+                            <label className="block text-xs text-fg-muted mb-1">{cls.name} <span className="text-fg-subtle">(default: {cls.term_fee_amount})</span></label>
+                            <input
+                              type="number"
+                              className="input text-sm"
+                              placeholder={String(cls.term_fee_amount)}
+                              value={feeInputs[cls.id] ?? ''}
+                              onChange={e => setFeeInputs(prev => ({ ...prev, [cls.id]: e.target.value }))}
+                              min={0}
+                              step={0.01}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={() => saveTermFees(term.id)} disabled={savingFees} className="btn-primary text-sm">
+                        {savingFees ? 'Saving…' : 'Save Fee Overrides'}
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <button onClick={() => saveTermFees(term.id)} disabled={savingFees} className="btn-primary text-sm">
-                  {savingFees ? 'Saving…' : 'Save Fee Overrides'}
-                </button>
-              </div>
-            )}
+              ))}
+            </div>
           </div>
         ))}
       </div>

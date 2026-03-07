@@ -36,10 +36,10 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
       <div
         ref={panelRef}
         tabIndex={-1}
-        className={cn('card shadow-xl max-w-md w-full p-6 outline-none', className)}
+        className={cn('card shadow-xl max-w-md w-full outline-none flex flex-col max-h-[92vh]', className)}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
           <h2 className="section-title">{title}</h2>
           <button
             onClick={onClose}
@@ -49,7 +49,9 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
             <X size={18} />
           </button>
         </div>
-        {children}
+        <div className="overflow-y-auto flex-1 min-h-0 px-6 pb-6">
+          {children}
+        </div>
       </div>
     </div>
   )

@@ -53,7 +53,7 @@ interface TeacherRow extends Teacher {
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function TeacherSalariesPage() {
-  const { isAdmin } = useRole()
+  const { isAdmin, schoolName: ctxSchoolName, schoolLogoUrl } = useRole()
   const supabase    = createClient()
 
   const now   = new Date()
@@ -174,21 +174,34 @@ export default function TeacherSalariesPage() {
         <td style="text-transform:capitalize">${p.payment_method.replace('_', ' ')}</td>
         <td>${p.notes ?? '—'}</td>
       </tr>`).join('')
+    const logoHtml = schoolLogoUrl
+      ? `<img src="${schoolLogoUrl}" alt="" style="width:52px;height:52px;object-fit:cover;border-radius:8px;" />`
+      : `<div style="width:52px;height:52px;border-radius:8px;background:#e5e7eb;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:bold;color:#374151;">${ctxSchoolName?.charAt(0) ?? 'S'}</div>`
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
       <title>Salary History — ${teacher.full_name}</title>
       <style>
         @page { size: auto; margin: 12mm; }
         body { font-family: sans-serif; font-size: 13px; color: #111; }
-        h1 { font-size: 18px; margin: 0 0 4px; }
-        h2 { font-size: 14px; font-weight: normal; color: #555; margin: 0 0 16px; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+        .header-left h1 { font-size: 16px; font-weight: bold; margin: 0; }
+        .header-left h2 { font-size: 13px; font-weight: 600; margin: 4px 0 0; }
+        .header-left p { font-size: 11px; color: #555; margin: 2px 0 0; }
+        hr { border: none; border-top: 1px solid #ccc; margin-bottom: 12px; }
         table { width: 100%; border-collapse: collapse; }
         th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
         th { background: #f3f4f6; font-weight: 600; }
         tr:nth-child(even) { background: #f9fafb; }
         tfoot td { font-weight: bold; background: #f3f4f6; }
       </style></head><body>
-      <h1>${teacher.full_name}</h1>
-      <h2>Salary Payment History &nbsp;·&nbsp; Employee No: ${teacher.employee_number ?? '—'}</h2>
+      <div class="header">
+        <div class="header-left">
+          <h1>${ctxSchoolName ?? 'School'}</h1>
+          <h2>Salary Payment History</h2>
+          <p>${teacher.full_name} &nbsp;·&nbsp; Employee No: ${teacher.employee_number ?? '—'}</p>
+        </div>
+        <div>${logoHtml}</div>
+      </div>
+      <hr />
       <table>
         <thead><tr><th>Date</th><th>Period</th><th>Amount</th><th>Method</th><th>Notes</th></tr></thead>
         <tbody>${rows}</tbody>

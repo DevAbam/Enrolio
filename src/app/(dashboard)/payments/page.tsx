@@ -28,14 +28,14 @@ interface PaymentWithStudent extends Payment {
 type StudentOption = { id: string; full_name: string; class_name?: string | null }
 
 export default function PaymentsPage() {
-  const { schoolName, isAdmin } = useRole()
-  const { activeTerm, allTerms } = useTerm()
+  const { schoolName, schoolLogoUrl, schoolAddress, schoolPhone, schoolEmail, isAdmin } = useRole()
+  const { activeTerm, allTerms, selectedTerm } = useTerm()
   const [payments,         setPayments]         = useState<PaymentWithStudent[]>([])
   const [loading,          setLoading]          = useState(true)
   const [search,           setSearch]           = useState('')
   const [dateFrom,         setDateFrom]         = useState('')
   const [dateTo,           setDateTo]           = useState(today())
-  const [termFilter,       setTermFilter]       = useState('')
+  const [termFilter,       setTermFilter]       = useState(selectedTerm?.id ?? '')
   const [page,             setPage]             = useState(1)
   const [total,            setTotal]            = useState(0)
   const [receiptPayment,   setReceiptPayment]   = useState<{ payment: PaymentWithStudent; studentName: string; className?: string; outstanding?: number } | null>(null)
@@ -76,6 +76,12 @@ export default function PaymentsPage() {
   }, [supabase, page, dateFrom, dateTo, search, termFilter])
 
   useEffect(() => { load() }, [load])
+
+  // Sync term filter when global selected term changes
+  useEffect(() => {
+    setTermFilter(selectedTerm?.id ?? '')
+    setPage(1)
+  }, [selectedTerm?.id])
 
   useEffect(() => {
     if (!payModal) { setStudentSearch(''); setStudentResults([]); setSelectedStudent(null) }
@@ -286,8 +292,13 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
           payment={receiptPayment.payment}
           studentName={receiptPayment.studentName}
           className={receiptPayment.className}
+          schoolLogoUrl={schoolLogoUrl ?? undefined}
           schoolName={schoolName ?? 'School'}
+          schoolAddress={schoolAddress ?? undefined}
+          schoolPhone={schoolPhone ?? undefined}
+          schoolEmail={schoolEmail ?? undefined}
           outstanding={receiptPayment.outstanding}
+          termLabel={allTerms.find(t => t.id === receiptPayment.payment.term_id)?.label}
           onClose={() => setReceiptPayment(null)}
         />
       )}
@@ -336,7 +347,6 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
             <PaymentForm
               studentId={selectedStudent.id}
               outstanding={0}
-              termId={activeTerm?.id}
               onSuccess={() => { setPayModal(false); setSelectedStudent(null); load() }}
               onCancel={() => { setPayModal(false); setSelectedStudent(null) }}
             />

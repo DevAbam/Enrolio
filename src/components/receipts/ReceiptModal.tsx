@@ -7,15 +7,20 @@ import { formatDate } from '@/lib/utils/date'
 import type { Payment } from '@/types'
 
 interface ReceiptModalProps {
-  payment:      Payment
-  studentName:  string
-  className?:   string
-  schoolName:   string
-  outstanding?: number
-  onClose:      () => void
+  payment:         Payment
+  studentName:     string
+  className?:      string
+  schoolName:      string
+  schoolLogoUrl?:  string
+  schoolAddress?:  string
+  schoolPhone?:    string
+  schoolEmail?:    string
+  outstanding?:    number
+  termLabel?:      string
+  onClose:         () => void
 }
 
-export function ReceiptModal({ payment, studentName, className, schoolName, outstanding, onClose }: ReceiptModalProps) {
+export function ReceiptModal({ payment, studentName, className, schoolName, schoolLogoUrl, schoolAddress, schoolPhone, schoolEmail, outstanding, termLabel, onClose }: ReceiptModalProps) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
@@ -55,10 +60,21 @@ export function ReceiptModal({ payment, studentName, className, schoolName, outs
         <div id="receipt-print-area" className="p-6 bg-surface print:bg-white print:text-black">
           {/* School Header */}
           <div className="text-center mb-5">
-            <div className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center text-lg font-bold mx-auto mb-2">
-              S
+            <div className="w-12 h-12 rounded-full overflow-hidden bg-accent text-white flex items-center justify-center text-lg font-bold mx-auto mb-2 border border-border print:border-gray-200">
+              {schoolLogoUrl
+                ? <img src={schoolLogoUrl} alt={schoolName} className="w-full h-full object-cover" loading="eager" />
+                : <span>S</span>
+              }
             </div>
             <h1 className="text-base font-bold text-fg print:text-black">{schoolName}</h1>
+            {(schoolAddress || schoolPhone || schoolEmail) && (
+              <div className="text-xs text-fg-subtle print:text-gray-600 mt-1 space-y-0.5">
+                {schoolAddress && <p>{schoolAddress}</p>}
+                {(schoolPhone || schoolEmail) && (
+                  <p>{[schoolPhone, schoolEmail].filter(Boolean).join(' · ')}</p>
+                )}
+              </div>
+            )}
             <p className="text-xs text-fg-subtle print:text-gray-600 uppercase tracking-widest mt-1">Official Receipt</p>
           </div>
 
@@ -87,6 +103,12 @@ export function ReceiptModal({ payment, studentName, className, schoolName, outs
               <div className="flex justify-between text-xs">
                 <span className="text-fg-subtle print:text-gray-600">Class</span>
                 <span className="font-semibold text-fg print:text-black">{className}</span>
+              </div>
+            )}
+            {termLabel && (
+              <div className="flex justify-between text-xs">
+                <span className="text-fg-subtle print:text-gray-600">Term</span>
+                <span className="font-semibold text-fg print:text-black">{termLabel}</span>
               </div>
             )}
           </div>

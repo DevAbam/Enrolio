@@ -14,7 +14,7 @@ export interface Student {
   id: string; school_id: string; class_id?: string; full_name: string
   admission_number?: string; date_of_birth?: string; gender?: string
   parent_name?: string; parent_phone?: string; parent_email?: string
-  discount_amount: number; is_active: boolean
+  discount_amount: number; is_active: boolean; photo_url?: string
   created_at: string; updated_at: string
 }
 
@@ -22,6 +22,7 @@ export interface Teacher {
   id: string; school_id: string; full_name: string; phone?: string
   email?: string; employee_number?: string; gender?: string; is_active: boolean
   user_id?: string | null; class_id?: string | null; salary_amount: number
+  date_of_birth?: string; photo_url?: string
   created_at: string; updated_at: string
 }
 
@@ -51,7 +52,7 @@ export interface Payment {
   id: string; school_id: string; student_id: string
   amount_paid: number; payment_date: string
   payment_method?: PaymentMethod; receipt_number?: string
-  recorded_by?: string; notes?: string; created_at: string
+  recorded_by?: string; notes?: string; term_id?: string; created_at: string
 }
 
 export interface StudentAttendance {
@@ -91,7 +92,9 @@ export interface StudentFeeSummary {
   id: string; school_id: string; full_name: string; admission_number?: string
   gender?: string; parent_name?: string; parent_phone?: string; is_active: boolean
   class_id?: string; class_name?: string; term_fee_amount: number
-  discount_amount: number; total_owed: number; total_paid: number; outstanding: number
+  discount_amount: number; carried_over_balance: number
+  total_owed: number; total_paid: number; outstanding: number
+  date_of_birth?: string; photo_url?: string
 }
 
 export interface SchoolRevenueSummary {

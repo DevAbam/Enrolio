@@ -18,6 +18,7 @@ const pageTitles: Record<string, string> = {
   '/attendance/students': 'Student Attendance',
   '/attendance/teachers': 'Teacher Attendance',
   '/sms':                 'SMS Center',
+  '/settings':            'School Settings',
 }
 
 function getPageTitle(pathname: string): string {

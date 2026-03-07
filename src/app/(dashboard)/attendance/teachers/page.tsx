@@ -36,23 +36,30 @@ const statuses: { value: AttendanceStatus; label: string; activeClass: string; p
 ]
 
 export default function TeacherAttendancePage() {
-  const { isAdmin, schoolName } = useRole()
-  const { activeTerm, allTerms } = useTerm()
+  const { isAdmin, schoolName, schoolLogoUrl } = useRole()
+  const { activeTerm, allTerms, selectedTerm } = useTerm()
   const [date,         setDate]         = useState(today())
   const [teachers,     setTeachers]     = useState<Teacher[]>([])
   const [records,      setRecords]      = useState<Map<string, AttendanceRecord>>(new Map())
   const [loading,      setLoading]      = useState(true)
   const [saving,       setSaving]       = useState(false)
-  const [historyTerm,  setHistoryTerm]  = useState('')
+  const [historyTerm,  setHistoryTerm]  = useState(selectedTerm?.id ?? '')
   const [historyYear,  setHistoryYear]  = useState('')
   const [historyData,  setHistoryData]  = useState<HistoryRecord[]>([])
-  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyLoading,    setHistoryLoading]    = useState(false)
+  const [teacherSummaryMode, setTeacherSummaryMode] = useState(false)
   const supabase = createClient()
 
   const isHistoryMode = !!(historyTerm || historyYear)
 
+  // Sync history term filter when global selected term changes
+  useEffect(() => {
+    setHistoryTerm(selectedTerm?.id ?? '')
+    setHistoryYear('')
+  }, [selectedTerm?.id])
+
   const load = useCallback(async () => {
-    if (isHistoryMode) return
+    if (isHistoryMode) { setLoading(false); return }
     setLoading(true)
     const { data: teacherList } = await supabase
       .from('teachers').select('*').eq('is_active', true).order('full_name')
@@ -141,14 +148,25 @@ export default function TeacherAttendancePage() {
 
   function handleExportCSV() {
     if (isHistoryMode) {
-      const headers = ['Date', 'Teacher Name', 'Employee No.', 'Status']
-      const rows = historyData.map((r) => [
-        formatDate(r.attendance_date),
-        r.teachers?.full_name ?? '',
-        r.teachers?.employee_number ?? '',
-        r.status,
-      ])
-      downloadExcel('teacher-attendance-history', headers, rows)
+      if (teacherSummaryMode) {
+        const headers = ['Teacher Name', 'Employee No.', 'Present', 'Absent', 'Late', 'Excused', 'Total Days', 'Attendance %']
+        const rows = teacherSummary.map(row => [
+          row.full_name,
+          row.employee_number ?? '',
+          String(row.present), String(row.absent), String(row.late), String(row.excused), String(row.total),
+          row.total > 0 ? `${Math.round((row.present / row.total) * 100)}%` : '0%',
+        ])
+        downloadExcel('teacher-attendance-summary', headers, rows)
+      } else {
+        const headers = ['Date', 'Teacher Name', 'Employee No.', 'Status']
+        const rows = historyData.map((r) => [
+          formatDate(r.attendance_date),
+          r.teachers?.full_name ?? '',
+          r.teachers?.employee_number ?? '',
+          r.status,
+        ])
+        downloadExcel('teacher-attendance-history', headers, rows)
+      }
       return
     }
     const headers = ['Date', 'Teacher Name', 'Employee No.', 'Status']
@@ -168,6 +186,28 @@ export default function TeacherAttendancePage() {
 
   const currentYear = new Date().getFullYear()
   const yearOptions = Array.from({ length: 8 }, (_, i) => currentYear - 3 + i)
+
+  // Per-teacher summary — group historyData by teacher_id
+  type TeacherSummaryRow = {
+    teacher_id: string; full_name: string; employee_number: string | null
+    present: number; absent: number; late: number; excused: number; total: number
+  }
+  const teacherSummaryMap = new Map<string, TeacherSummaryRow>()
+  for (const r of historyData) {
+    const tid = r.teacher_id
+    if (!teacherSummaryMap.has(tid)) {
+      teacherSummaryMap.set(tid, {
+        teacher_id: tid,
+        full_name: r.teachers?.full_name ?? '—',
+        employee_number: r.teachers?.employee_number ?? null,
+        present: 0, absent: 0, late: 0, excused: 0, total: 0,
+      })
+    }
+    const row = teacherSummaryMap.get(tid)!
+    row[r.status as 'present' | 'absent' | 'late' | 'excused']++
+    row.total++
+  }
+  const teacherSummary = Array.from(teacherSummaryMap.values()).sort((a, b) => a.full_name.localeCompare(b.full_name))
 
   return (
     <div className="space-y-6">
@@ -212,56 +252,131 @@ export default function TeacherAttendancePage() {
 
       {/* Print-only header */}
       <div className="print-only hidden">
-        <h1 className="text-lg font-bold">{schoolName}</h1>
-        <h2 className="text-base font-semibold mt-1">Teacher Attendance Report</h2>
-        <p className="text-sm text-gray-600 mt-0.5">
-          {isHistoryMode
-            ? allTerms.find(t => t.id === historyTerm)?.label ?? `Year ${historyYear}`
-            : `Date: ${formatDate(date)}`
-          }
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+          <div>
+            <h1 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0 }}>{schoolName}</h1>
+            <h2 style={{ fontSize: '13px', fontWeight: '600', margin: '4px 0 0' }}>Teacher Attendance Report</h2>
+            <p style={{ fontSize: '11px', color: '#555', margin: '2px 0 0' }}>
+              {isHistoryMode
+                ? allTerms.find(t => t.id === historyTerm)?.label ?? `Year ${historyYear}`
+                : `Date: ${formatDate(date)}`
+              }
+            </p>
+          </div>
+          <div style={{ textAlign: 'center' }}>
+            {schoolLogoUrl
+              ? <img src={schoolLogoUrl} alt={schoolName ?? ''} style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', display: 'block' }} />
+              : <div style={{ width: '56px', height: '56px', borderRadius: '8px', background: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '22px', fontWeight: 'bold', color: '#374151' }}>{schoolName?.charAt(0) ?? 'S'}</div>
+            }
+          </div>
+        </div>
+        <hr style={{ borderTop: '1px solid #ccc', marginBottom: '8px' }} />
       </div>
 
       {isHistoryMode ? (
         <div className="card overflow-hidden">
-          <Table>
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Teacher</th>
-                <th>Employee No.</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {historyLoading ? (
-                <TableSkeleton rows={6} cols={4} />
-              ) : historyData.length === 0 ? (
-                <tr><td colSpan={4}>
-                  <EmptyState icon={<span>📋</span>} title="No records found" description="No attendance records match the selected year or term" />
-                </td></tr>
-              ) : (
-                historyData.map((r) => (
-                  <tr key={r.id}>
-                    <td className="text-sm">{formatDate(r.attendance_date)}</td>
-                    <td className="font-medium">{r.teachers?.full_name ?? '—'}</td>
-                    <td className="text-fg-muted text-xs">{r.teachers?.employee_number ?? '—'}</td>
-                    <td>
-                      <span className={cn(
-                        'px-2 py-0.5 text-xs rounded border font-medium',
-                        r.status === 'present' ? 'bg-accent text-white border-accent' :
-                        r.status === 'absent'  ? 'bg-red-600 text-white border-red-600' :
-                        r.status === 'late'    ? 'bg-yellow-500 text-white border-yellow-500' :
-                        'bg-gray-500 text-white border-gray-500'
-                      )}>
-                        {r.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </Table>
+          {/* View toggle */}
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-border no-print">
+            <button
+              onClick={() => setTeacherSummaryMode(false)}
+              className={cn('px-3 py-1 text-xs rounded font-medium border transition-colors', !teacherSummaryMode ? 'bg-accent text-white border-accent' : 'border-border text-fg-muted hover:bg-surface-alt')}
+            >
+              Records
+            </button>
+            <button
+              onClick={() => setTeacherSummaryMode(true)}
+              className={cn('px-3 py-1 text-xs rounded font-medium border transition-colors', teacherSummaryMode ? 'bg-accent text-white border-accent' : 'border-border text-fg-muted hover:bg-surface-alt')}
+            >
+              Teacher Summary
+            </button>
+          </div>
+
+          {teacherSummaryMode ? (
+            /* Per-teacher summary table */
+            <Table>
+              <thead>
+                <tr>
+                  <th>Teacher</th>
+                  <th>Employee No.</th>
+                  <th className="text-green-700">Present</th>
+                  <th className="text-red-600">Absent</th>
+                  <th className="text-yellow-600">Late</th>
+                  <th className="text-gray-500">Excused</th>
+                  <th>Total Days</th>
+                  <th>Attendance %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historyLoading ? (
+                  <TableSkeleton rows={6} cols={8} />
+                ) : teacherSummary.length === 0 ? (
+                  <tr><td colSpan={8}>
+                    <EmptyState icon={<span>📋</span>} title="No attendance records found" description="No records match the selected filters" />
+                  </td></tr>
+                ) : (
+                  teacherSummary.map(row => {
+                    const pct = row.total > 0 ? Math.round((row.present / row.total) * 100) : 0
+                    return (
+                      <tr key={row.teacher_id}>
+                        <td className="font-medium">{row.full_name}</td>
+                        <td className="text-fg-muted text-xs">{row.employee_number ?? '—'}</td>
+                        <td className="text-green-700 font-medium">{row.present}</td>
+                        <td className="text-red-600 font-medium">{row.absent}</td>
+                        <td className="text-yellow-600 font-medium">{row.late}</td>
+                        <td className="text-gray-500 font-medium">{row.excused}</td>
+                        <td>{row.total}</td>
+                        <td>
+                          <span className={cn('font-medium', pct >= 80 ? 'text-green-700' : pct >= 60 ? 'text-yellow-600' : 'text-red-600')}>
+                            {pct}%
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </Table>
+          ) : (
+            /* Flat records table */
+            <Table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Teacher</th>
+                  <th>Employee No.</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {historyLoading ? (
+                  <TableSkeleton rows={6} cols={4} />
+                ) : historyData.length === 0 ? (
+                  <tr><td colSpan={4}>
+                    <EmptyState icon={<span>📋</span>} title="No records found" description="No attendance records match the selected year or term" />
+                  </td></tr>
+                ) : (
+                  historyData.map((r) => (
+                    <tr key={r.id}>
+                      <td className="text-sm">{formatDate(r.attendance_date)}</td>
+                      <td className="font-medium">{r.teachers?.full_name ?? '—'}</td>
+                      <td className="text-fg-muted text-xs">{r.teachers?.employee_number ?? '—'}</td>
+                      <td>
+                        <span className={cn(
+                          'px-2 py-0.5 text-xs rounded border font-medium',
+                          r.status === 'present' ? 'bg-accent text-white border-accent' :
+                          r.status === 'absent'  ? 'bg-red-600 text-white border-red-600' :
+                          r.status === 'late'    ? 'bg-yellow-500 text-white border-yellow-500' :
+                          'bg-gray-500 text-white border-gray-500'
+                        )}>
+                          {r.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </Table>
+          )}
         </div>
       ) : (
         <div className="card overflow-hidden">

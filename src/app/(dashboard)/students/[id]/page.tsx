@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, MessageSquare, Pencil, Printer, ChevronUp, ChevronDown } from 'lucide-react'
+import { ArrowLeft, MessageSquare, Pencil, Printer, ChevronUp, ChevronDown, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -61,12 +61,14 @@ export default function StudentDetailPage() {
   const [editModal,    setEditModal]    = useState(searchParams.get('edit') === '1')
   const [payModal,     setPayModal]     = useState(false)
   const [receiptPayment, setReceiptPayment] = useState<Payment | null>(null)
+  const [detailPayment,  setDetailPayment]  = useState<Payment | null>(null)
   const [promoting,    setPromoting]    = useState(false)
   const supabase = createClient()
 
   const load = useCallback(async () => {
     setLoading(true)
-    let paymentsQuery = supabase.from('payments').select('*').eq('student_id', id).order('payment_date', { ascending: false })
+    let paymentsQuery = supabase.from('payments').select('*').eq('student_id', id)
+      .order('payment_date', { ascending: false }).order('created_at', { ascending: false })
     if (selectedTerm?.id) paymentsQuery = paymentsQuery.eq('term_id', selectedTerm.id)
     const [{ data: s }, { data: p }, { data: cls }] = await Promise.all([
       supabase.from('student_fee_summary').select('*').eq('id', id).single(),
@@ -380,15 +382,26 @@ export default function StudentDetailPage() {
                   <td className="font-medium text-accent-fg">{formatCurrency(Number(p.amount_paid))}</td>
                   <td className="capitalize text-fg-muted">{p.payment_method?.replace('_', ' ') ?? '—'}</td>
                   <td className="text-fg-muted text-xs">{p.receipt_number ?? '—'}</td>
-                  <td className="text-fg-muted max-w-xs truncate" title={p.notes ?? ''}>{p.notes ?? '—'}</td>
+                  <td className="text-fg-muted text-xs">
+                    {p.notes ? (p.notes.length > 10 ? p.notes.slice(0, 10) + '…' : p.notes) : '—'}
+                  </td>
                   <td>
-                    <button
-                      className="btn-ghost p-1.5 rounded"
-                      title="View Receipt"
-                      onClick={() => setReceiptPayment(p)}
-                    >
-                      <Printer size={14} />
-                    </button>
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        className="btn-ghost p-1.5 rounded"
+                        title="See Details"
+                        onClick={() => setDetailPayment(p)}
+                      >
+                        <Eye size={14} />
+                      </button>
+                      <button
+                        className="btn-ghost p-1.5 rounded"
+                        title="Print Receipt"
+                        onClick={() => setReceiptPayment(p)}
+                      >
+                        <Printer size={14} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -421,10 +434,86 @@ export default function StudentDetailPage() {
           schoolAddress={schoolAddress ?? undefined}
           schoolPhone={schoolPhone ?? undefined}
           schoolEmail={schoolEmail ?? undefined}
-          outstanding={outstanding}
           termLabel={allTerms.find(t => t.id === receiptPayment.term_id)?.label}
           onClose={() => setReceiptPayment(null)}
         />
+      )}
+
+      {/* Payment Details Modal */}
+      {detailPayment && (
+        <Modal open={!!detailPayment} onClose={() => setDetailPayment(null)} title="Payment Details">
+          <dl className="space-y-3 text-sm">
+            <div className="flex justify-between">
+              <dt className="text-fg-muted">Receipt No.</dt>
+              <dd className="font-mono font-semibold">{detailPayment.receipt_number ?? '—'}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-fg-muted">Payment Date</dt>
+              <dd className="font-medium">{formatDate(detailPayment.payment_date)}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-fg-muted">Student</dt>
+              <dd className="font-medium">{student.full_name}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-fg-muted">Class</dt>
+              <dd className="font-medium">{student.class_name ?? '—'}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-fg-muted">Term</dt>
+              <dd className="font-medium">{allTerms.find(t => t.id === detailPayment.term_id)?.label ?? '—'}</dd>
+            </div>
+            <div className="border-t border-border pt-3 flex justify-between">
+              <dt className="text-fg-muted">Balance Before Payment</dt>
+              <dd className="font-semibold">
+                {detailPayment.balance_after == null
+                  ? <span className="text-fg-muted">—</span>
+                  : <span className={Number(detailPayment.balance_after) + Number(detailPayment.amount_paid) > 0 ? 'text-red-500' : 'text-fg'}>
+                      {formatCurrency(Number(detailPayment.balance_after) + Number(detailPayment.amount_paid))}
+                    </span>
+                }
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-fg-muted">Amount Paid</dt>
+              <dd className="font-bold text-accent text-base">{formatCurrency(Number(detailPayment.amount_paid))}</dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-fg-muted">Balance After Payment</dt>
+              <dd className="font-semibold">
+                {detailPayment.balance_after == null
+                  ? <span className="text-fg-muted">—</span>
+                  : Number(detailPayment.balance_after) === 0
+                    ? <span className="text-accent">Fully Paid</span>
+                    : <span className="text-red-500">{formatCurrency(Number(detailPayment.balance_after))}</span>
+                }
+              </dd>
+            </div>
+            <div className="flex justify-between">
+              <dt className="text-fg-muted">Payment Method</dt>
+              <dd className="font-medium capitalize">{detailPayment.payment_method?.replace('_', ' ') ?? '—'}</dd>
+            </div>
+            {detailPayment.notes && (
+              <div className="border-t border-border pt-3">
+                <dt className="text-fg-muted mb-1">Notes</dt>
+                <dd className="text-fg whitespace-pre-wrap break-words">{detailPayment.notes}</dd>
+              </div>
+            )}
+            <div className="border-t border-border pt-3 flex justify-between">
+              <dt className="text-fg-muted">Recorded</dt>
+              <dd className="text-fg-muted text-xs">{formatDate(detailPayment.created_at)}</dd>
+            </div>
+          </dl>
+          <div className="mt-4 flex gap-2">
+            <button
+              className="btn-secondary flex-1 justify-center flex items-center gap-2 text-sm"
+              onClick={() => { setDetailPayment(null); setReceiptPayment(detailPayment) }}
+            >
+              <Printer size={14} /> Print Receipt
+            </button>
+            <button className="btn-ghost" onClick={() => setDetailPayment(null)}>Close</button>
+          </div>
+        </Modal>
       )}
 
       {/* Edit Modal */}

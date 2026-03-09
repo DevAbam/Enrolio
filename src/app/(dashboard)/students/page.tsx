@@ -6,6 +6,7 @@ import { Plus, MessageSquare, Pencil, X, Power } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { useRole } from '@/contexts/RoleContext'
+import { useTerm } from '@/lib/term-context'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -23,6 +24,7 @@ const PAGE_SIZE = 10
 
 export default function StudentsPage() {
   const { isAdmin, teacherClassId } = useRole()
+  const { activeTerm } = useTerm()
   const router = useRouter()
   const [students, setStudents] = useState<StudentFeeSummary[]>([])
   const [classes, setClasses] = useState<Class[]>([])
@@ -50,11 +52,13 @@ export default function StudentsPage() {
     const effectiveClass = !isAdmin && teacherClassId ? teacherClassId : classFilter
     if (effectiveClass) query = query.eq('class_id', effectiveClass)
     if (isAdmin) {
-      if (statusFilter === 'has_balance') query = query.gt('outstanding', 0).eq('is_active', true)
-      if (statusFilter === 'fully_paid') query = query.eq('outstanding', 0).eq('is_active', true)
-      if (statusFilter === 'inactive') query = query.eq('is_active', false)
+      if (statusFilter === 'has_balance') query = query.gt('outstanding', 0).eq('is_active', true).eq('is_graduated', false)
+      else if (statusFilter === 'fully_paid') query = query.eq('outstanding', 0).eq('is_active', true).eq('is_graduated', false)
+      else if (statusFilter === 'inactive') query = query.eq('is_active', false).eq('is_graduated', false)
+      else if (statusFilter === 'graduated') query = query.eq('is_graduated', true)
+      else query = query.eq('is_graduated', false)
     } else {
-      query = query.eq('is_active', true)
+      query = query.eq('is_active', true).eq('is_graduated', false)
     }
 
     const { data, count, error } = await query
@@ -93,7 +97,7 @@ export default function StudentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Students"
-        subtitle={`${total} student${total !== 1 ? 's' : ''}`}
+        subtitle={`${total} student${total !== 1 ? 's' : ''}${activeTerm ? ` · ${activeTerm.label}` : ''}`}
         action={isAdmin ? (
           <Link href="/students/new">
             <Button icon={<Plus size={16} />}>Add Student</Button>
@@ -135,10 +139,11 @@ export default function StudentsPage() {
                 value={statusFilter}
                 onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
               >
-                <option value="">All Status</option>
+                <option value="">All Active</option>
                 <option value="has_balance">Has Balance</option>
                 <option value="fully_paid">Fully Paid</option>
                 <option value="inactive">Inactive</option>
+                <option value="graduated">Graduated</option>
               </select>
             </>
           )}
@@ -230,17 +235,19 @@ export default function StudentsPage() {
                     <td className="text-gray-500 dark:text-gray-400">{s.parent_phone ?? '—'}</td>
                     {isAdmin && (
                       <td>
-                        {!s.is_active
-                          ? <Badge variant="gray">Inactive</Badge>
-                          : outstanding === 0
-                            ? <Badge variant="green">Paid</Badge>
-                            : <span className="font-medium text-red-600 dark:text-red-400">{formatCurrency(outstanding)}</span>
+                        {s.is_graduated
+                          ? <Badge variant="gray">Graduated</Badge>
+                          : !s.is_active
+                            ? <Badge variant="gray">Inactive</Badge>
+                            : outstanding === 0
+                              ? <Badge variant="green">Paid</Badge>
+                              : <span className="font-medium text-red-600 dark:text-red-400">{formatCurrency(outstanding)}</span>
                         }
                       </td>
                     )}
                     <td>
-                      <Badge variant={s.is_active ? 'green' : 'gray'}>
-                        {s.is_active ? 'Active' : 'Inactive'}
+                      <Badge variant={s.is_graduated ? 'yellow' : s.is_active ? 'green' : 'gray'}>
+                        {s.is_graduated ? 'Graduated' : s.is_active ? 'Active' : 'Inactive'}
                       </Badge>
                     </td>
                     {isAdmin && (

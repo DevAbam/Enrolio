@@ -7,20 +7,22 @@ import { formatDate } from '@/lib/utils/date'
 import type { Payment } from '@/types'
 
 interface ReceiptModalProps {
-  payment:         Payment
-  studentName:     string
-  className?:      string
-  schoolName:      string
-  schoolLogoUrl?:  string
-  schoolAddress?:  string
-  schoolPhone?:    string
-  schoolEmail?:    string
-  outstanding?:    number
-  termLabel?:      string
-  onClose:         () => void
+  payment:        Payment
+  studentName:    string
+  className?:     string
+  schoolName:     string
+  schoolLogoUrl?: string
+  schoolAddress?: string
+  schoolPhone?:   string
+  schoolEmail?:   string
+  termLabel?:     string
+  onClose:        () => void
 }
 
-export function ReceiptModal({ payment, studentName, className, schoolName, schoolLogoUrl, schoolAddress, schoolPhone, schoolEmail, outstanding, termLabel, onClose }: ReceiptModalProps) {
+export function ReceiptModal({ payment, studentName, className, schoolName, schoolLogoUrl, schoolAddress, schoolPhone, schoolEmail, termLabel, onClose }: ReceiptModalProps) {
+  // Use the snapshotted balance stored at payment time.
+  // For legacy payments (balance_after is null), show nothing rather than a wrong live value.
+  const balanceAfter = payment.balance_after != null ? Number(payment.balance_after) : null
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
@@ -122,9 +124,11 @@ export function ReceiptModal({ payment, studentName, className, schoolName, scho
           </div>
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-fg-subtle print:text-gray-600">Balance Remaining</span>
-            {outstanding != null && outstanding > 0
-              ? <span className="text-base font-bold text-red-500 print:text-red-600">{formatCurrency(outstanding)}</span>
-              : <span className="text-base font-bold text-accent print:text-green-700">Fully Paid</span>
+            {balanceAfter == null
+              ? <span className="text-base font-semibold text-fg-muted print:text-gray-500">—</span>
+              : balanceAfter > 0
+                ? <span className="text-base font-bold text-red-500 print:text-red-600">{formatCurrency(balanceAfter)}</span>
+                : <span className="text-base font-bold text-accent print:text-green-700">Fully Paid</span>
             }
           </div>
           {payment.payment_method && (

@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Pencil, ChevronsUp } from 'lucide-react'
+import { Plus, Pencil, ChevronsUp, GraduationCap } from 'lucide-react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -12,33 +12,36 @@ import { Modal } from '@/components/ui/Modal'
 import { Table } from '@/components/ui/Table'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { TableSkeleton } from '@/components/ui/Skeleton'
-import { formatCurrency } from '@/lib/utils/currency'
 import type { Class } from '@/types'
 
-type PromoteStudent = { id: string; full_name: string; admission_number: string | null }
-
-type ClassWithLevel = Class & { level?: number | null }
+type ActionStudent = { id: string; full_name: string; admission_number: string | null }
 
 const classSchema = z.object({
-  name: z.string().min(1, 'Class name is required'),
-  term_fee_amount: z.coerce.number().min(0, 'Fee must be 0 or more'),
-  academic_year: z.string().optional(),
+  name:  z.string().min(1, 'Class name is required'),
   level: z.coerce.number().int().optional().nullable(),
 })
 type ClassForm = z.infer<typeof classSchema>
 
 export default function ClassesPage() {
-  const [classes, setClasses] = useState<ClassWithLevel[]>([])
+  const [classes, setClasses] = useState<Class[]>([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModal] = useState(false)
-  const [editing, setEditing] = useState<ClassWithLevel | null>(null)
-  const [promoting, setPromoting] = useState<string | null>(null)
-  // promote modal state
-  const [promoteModal, setPromoteModal] = useState<{ cls: ClassWithLevel; nextCls: ClassWithLevel } | null>(null)
-  const [promoteStudents, setPromoteStudents] = useState<PromoteStudent[]>([])
+  const [editing, setEditing] = useState<Class | null>(null)
+
+  // Promote modal
+  const [promoteModal, setPromoteModal] = useState<{ cls: Class; nextCls: Class } | null>(null)
+  const [promoteStudents, setPromoteStudents] = useState<ActionStudent[]>([])
   const [promoteSelected, setPromoteSelected] = useState<Set<string>>(new Set())
   const [promoteLoading, setPromoteLoading] = useState(false)
   const [promoteSaving, setPromoteSaving] = useState(false)
+
+  // Graduate modal (for the highest-level class)
+  const [graduateModal, setGraduateModal] = useState<{ cls: Class } | null>(null)
+  const [graduateStudents, setGraduateStudents] = useState<ActionStudent[]>([])
+  const [graduateSelected, setGraduateSelected] = useState<Set<string>>(new Set())
+  const [graduateLoading, setGraduateLoading] = useState(false)
+  const [graduateSaving, setGraduateSaving] = useState(false)
+
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -49,7 +52,7 @@ export default function ClassesPage() {
       .order('level', { ascending: true, nullsFirst: false })
       .order('name')
     if (error) toast.error(error.message)
-    else setClasses((data ?? []) as ClassWithLevel[])
+    else setClasses((data ?? []) as Class[])
     setLoading(false)
   }, [supabase])
 
@@ -61,23 +64,18 @@ export default function ClassesPage() {
 
   function openAdd() {
     setEditing(null)
-    reset({ name: '', term_fee_amount: 0, academic_year: '', level: null })
+    reset({ name: '', level: null })
     setModal(true)
   }
 
-  function openEdit(cls: ClassWithLevel) {
+  function openEdit(cls: Class) {
     setEditing(cls)
-    reset({ name: cls.name, term_fee_amount: cls.term_fee_amount, academic_year: cls.academic_year ?? '', level: cls.level ?? null })
+    reset({ name: cls.name, level: cls.level ?? null })
     setModal(true)
   }
 
   async function onSubmit(values: ClassForm) {
-    const payload = {
-      name: values.name,
-      term_fee_amount: values.term_fee_amount,
-      academic_year: values.academic_year || null,
-      level: values.level ?? null,
-    }
+    const payload = { name: values.name, level: values.level ?? null }
     if (editing) {
       const { error } = await supabase.from('classes').update(payload).eq('id', editing.id)
       if (error) { toast.error(error.message); return }
@@ -87,32 +85,44 @@ export default function ClassesPage() {
       const { data: me } = await supabase.from('users').select('school_id').eq('id', user!.id).single()
       const { error } = await supabase.from('classes').insert({ ...payload, school_id: me!.school_id })
       if (error) { toast.error(error.message); return }
-      toast.success('Class added')
+      toast.success('Class added — set fees for this class in Terms → expand term → Class Fees')
     }
     setModal(false)
     load()
   }
 
-  async function openPromoteModal(cls: ClassWithLevel) {
-    if (cls.level == null) {
-      toast.error('Set a level on this class first so we know which class comes next.')
-      return
-    }
-    const nextCls = classes.find(c => c.level === (cls.level! + 1))
-    if (!nextCls) {
-      toast.error('No class found with the next level. This may be the highest level.')
-      return
-    }
-    setPromoteLoading(true)
-    setPromoteModal({ cls, nextCls })
+  /** True when no class has a higher level than cls */
+  function isHighestLevel(cls: Class): boolean {
+    if (cls.level == null) return false
+    return !classes.some(c => c.level != null && c.level > cls.level!)
+  }
+
+  async function loadClassStudents(cls: Class): Promise<ActionStudent[]> {
     const { data, error } = await supabase
       .from('students')
       .select('id, full_name, admission_number')
       .eq('class_id', cls.id)
       .eq('is_active', true)
+      .eq('is_graduated', false)
       .order('full_name')
-    if (error) { toast.error(error.message); setPromoteModal(null); setPromoteLoading(false); return }
-    const list = (data ?? []) as PromoteStudent[]
+    if (error) { toast.error(error.message); return [] }
+    return (data ?? []) as ActionStudent[]
+  }
+
+  // ── Promote ───────────────────────────────────────────────────────────────
+  async function openPromoteModal(cls: Class) {
+    if (cls.level == null) {
+      toast.error('Set a level on this class first so we know which class comes next.')
+      return
+    }
+    const nextCls = classes.find(c => c.level === cls.level! + 1)
+    if (!nextCls) {
+      toast.error('No class found with the next level. Use the Graduate action for the highest level.')
+      return
+    }
+    setPromoteLoading(true)
+    setPromoteModal({ cls, nextCls })
+    const list = await loadClassStudents(cls)
     setPromoteStudents(list)
     setPromoteSelected(new Set(list.map(s => s.id)))
     setPromoteLoading(false)
@@ -128,16 +138,95 @@ export default function ClassesPage() {
       p_target_class_id: promoteModal.nextCls.id,
     })
     if (error) { toast.error(error.message) }
-    else { toast.success(`${ids.length} student${ids.length !== 1 ? 's' : ''} promoted to ${promoteModal.nextCls.name}`) }
+    else {
+      toast.success(
+        `${ids.length} student${ids.length !== 1 ? 's' : ''} promoted to ${promoteModal.nextCls.name}. ` +
+        'Outstanding balances carried forward.'
+      )
+    }
     setPromoteSaving(false)
     setPromoteModal(null)
+  }
+
+  // ── Graduate ──────────────────────────────────────────────────────────────
+  async function openGraduateModal(cls: Class) {
+    setGraduateLoading(true)
+    setGraduateModal({ cls })
+    const list = await loadClassStudents(cls)
+    setGraduateStudents(list)
+    setGraduateSelected(new Set(list.map(s => s.id)))
+    setGraduateLoading(false)
+  }
+
+  async function executeGraduation() {
+    if (!graduateModal) return
+    const ids = Array.from(graduateSelected)
+    if (ids.length === 0) { toast.error('No students selected.'); return }
+    setGraduateSaving(true)
+    const { error } = await supabase.rpc('graduate_students', { p_student_ids: ids })
+    if (error) { toast.error(error.message) }
+    else {
+      toast.success(
+        `${ids.length} student${ids.length !== 1 ? 's' : ''} graduated from ${graduateModal.cls.name}. ` +
+        'Full history is preserved.'
+      )
+    }
+    setGraduateSaving(false)
+    setGraduateModal(null)
+  }
+
+  // ── Student selection helpers ─────────────────────────────────────────────
+  function makeCheckboxList(
+    students: ActionStudent[],
+    selected: Set<string>,
+    setSelected: (s: Set<string>) => void,
+    listId: string,
+  ) {
+    return (
+      <>
+        <div className="flex items-center gap-2 pb-1 border-b border-border">
+          <input
+            type="checkbox"
+            id={listId}
+            className="rounded border-border"
+            checked={selected.size === students.length && students.length > 0}
+            onChange={(e) => {
+              if (e.target.checked) setSelected(new Set(students.map(s => s.id)))
+              else setSelected(new Set())
+            }}
+          />
+          <label htmlFor={listId} className="text-sm font-medium text-fg cursor-pointer">
+            Select all ({students.length})
+          </label>
+          <span className="ml-auto text-xs text-fg-muted">{selected.size} selected</span>
+        </div>
+        <div className="max-h-64 overflow-y-auto space-y-1">
+          {students.map(s => (
+            <label key={s.id} className="flex items-center gap-3 px-1 py-1.5 rounded hover:bg-surface-alt cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded border-border"
+                checked={selected.has(s.id)}
+                onChange={() => {
+                  const next = new Set(selected)
+                  next.has(s.id) ? next.delete(s.id) : next.add(s.id)
+                  setSelected(next)
+                }}
+              />
+              <span className="text-sm text-fg flex-1">{s.full_name}</span>
+              {s.admission_number && <span className="text-xs text-fg-muted">{s.admission_number}</span>}
+            </label>
+          ))}
+        </div>
+      </>
+    )
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Classes"
-        subtitle="Manage class groups and term fees"
+        subtitle="Define class structure. Set fees per term in the Terms page."
         action={<Button icon={<Plus size={16} />} onClick={openAdd}>Add Class</Button>}
       />
 
@@ -147,61 +236,79 @@ export default function ClassesPage() {
             <tr>
               <th>Level</th>
               <th>Class Name</th>
-              <th>Term Fee</th>
-              <th>Academic Year</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <TableSkeleton rows={5} cols={5} />
+              <TableSkeleton rows={5} cols={3} />
             ) : classes.length === 0 ? (
-              <tr><td colSpan={5}>
+              <tr><td colSpan={3}>
                 <EmptyState
-                  // icon={<span>📚</span>}
                   title="No classes yet"
-                  description="Add your first class to get started"
+                  description="Add your first class, then set fees for each class in the Terms page."
                   action={<Button variant="secondary" icon={<Plus size={14} />} onClick={openAdd} size="sm">Add Class</Button>}
                 />
               </td></tr>
             ) : (
-              classes.map((cls) => (
-                <tr key={cls.id}>
-                  <td className="text-fg-muted text-sm">{cls.level ?? <span className="text-fg-subtle">—</span>}</td>
-                  <td className="font-medium">{cls.name}</td>
-                  <td>{formatCurrency(Number(cls.term_fee_amount))}</td>
-                  <td className="text-gray-500 dark:text-gray-400">{cls.academic_year ?? '—'}</td>
-                  <td>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => openEdit(cls)}
-                        className="btn-ghost p-2 rounded-lg"
-                        aria-label="Edit class"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        onClick={() => openPromoteModal(cls)}
-                        disabled={promoting === cls.id}
-                        className="btn-ghost p-2 rounded-lg"
-                        title="Promote students in this class to the next level"
-                      >
-                        <ChevronsUp size={15} className="text-accent" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              classes.map((cls) => {
+                const isTop = isHighestLevel(cls)
+                return (
+                  <tr key={cls.id}>
+                    <td className="text-fg-muted text-sm w-16">
+                      {cls.level ?? <span className="text-fg-subtle">—</span>}
+                    </td>
+                    <td className="font-medium">
+                      {cls.name}
+                      {isTop && cls.level != null && (
+                        <span className="ml-2 text-xs text-fg-subtle border border-border rounded px-1.5 py-0.5">
+                          Final Level
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => openEdit(cls)}
+                          className="btn-ghost p-2 rounded-lg"
+                          aria-label="Edit class"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        {cls.level != null && (
+                          isTop ? (
+                            <button
+                              onClick={() => openGraduateModal(cls)}
+                              className="btn-ghost p-2 rounded-lg"
+                              title="Graduate students from this final-level class"
+                            >
+                              <GraduationCap size={15} className="text-accent" />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => openPromoteModal(cls)}
+                              className="btn-ghost p-2 rounded-lg"
+                              title="Promote students to the next level"
+                            >
+                              <ChevronsUp size={15} className="text-accent" />
+                            </button>
+                          )
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })
             )}
           </tbody>
         </Table>
       </div>
 
-      {/* Promote with exclusions modal */}
+      {/* ── Promote modal ── */}
       <Modal
         open={!!promoteModal}
         onClose={() => setPromoteModal(null)}
-        title={promoteModal ? `Promote from ${promoteModal.cls.name} → ${promoteModal.nextCls.name}` : ''}
+        title={promoteModal ? `Promote: ${promoteModal.cls.name} → ${promoteModal.nextCls.name}` : ''}
       >
         {promoteLoading ? (
           <div className="py-8 text-center text-fg-muted text-sm">Loading students…</div>
@@ -210,52 +317,13 @@ export default function ClassesPage() {
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-fg-muted">
-              Uncheck any students you want to exclude from this promotion. All others will be moved to{' '}
+              Uncheck students to exclude. Selected students move to{' '}
               <span className="font-medium text-fg">{promoteModal?.nextCls.name}</span>.
+              Outstanding balances carry forward.
             </p>
-            <div className="flex items-center gap-2 pb-1 border-b border-border">
-              <input
-                type="checkbox"
-                id="select-all-promote"
-                className="rounded border-border"
-                checked={promoteSelected.size === promoteStudents.length}
-                onChange={(e) => {
-                  if (e.target.checked) setPromoteSelected(new Set(promoteStudents.map(s => s.id)))
-                  else setPromoteSelected(new Set())
-                }}
-              />
-              <label htmlFor="select-all-promote" className="text-sm font-medium text-fg cursor-pointer">
-                Select all ({promoteStudents.length})
-              </label>
-              <span className="ml-auto text-xs text-fg-muted">{promoteSelected.size} selected</span>
-            </div>
-            <div className="max-h-64 overflow-y-auto space-y-1">
-              {promoteStudents.map(s => (
-                <label key={s.id} className="flex items-center gap-3 px-1 py-1.5 rounded hover:bg-surface-alt cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="rounded border-border"
-                    checked={promoteSelected.has(s.id)}
-                    onChange={() => {
-                      setPromoteSelected(prev => {
-                        const next = new Set(prev)
-                        next.has(s.id) ? next.delete(s.id) : next.add(s.id)
-                        return next
-                      })
-                    }}
-                  />
-                  <span className="text-sm text-fg flex-1">{s.full_name}</span>
-                  {s.admission_number && <span className="text-xs text-fg-muted">{s.admission_number}</span>}
-                </label>
-              ))}
-            </div>
+            {makeCheckboxList(promoteStudents, promoteSelected, setPromoteSelected, 'select-all-promote')}
             <div className="flex gap-3 pt-2">
-              <Button
-                className="flex-1 justify-center"
-                onClick={executePromotion}
-                loading={promoteSaving}
-                disabled={promoteSelected.size === 0}
-              >
+              <Button className="flex-1 justify-center" onClick={executePromotion} loading={promoteSaving} disabled={promoteSelected.size === 0}>
                 Promote {promoteSelected.size} Student{promoteSelected.size !== 1 ? 's' : ''}
               </Button>
               <Button type="button" variant="ghost" onClick={() => setPromoteModal(null)}>Cancel</Button>
@@ -264,6 +332,34 @@ export default function ClassesPage() {
         )}
       </Modal>
 
+      {/* ── Graduate modal ── */}
+      <Modal
+        open={!!graduateModal}
+        onClose={() => setGraduateModal(null)}
+        title={graduateModal ? `Graduate students from ${graduateModal.cls.name}` : ''}
+      >
+        {graduateLoading ? (
+          <div className="py-8 text-center text-fg-muted text-sm">Loading students…</div>
+        ) : graduateStudents.length === 0 ? (
+          <div className="py-8 text-center text-fg-muted text-sm">No active students in this class.</div>
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+              Graduated students are deactivated. Their full history — attendance, payments, and records — is kept permanently.
+            </div>
+            <p className="text-sm text-fg-muted">Uncheck any students to exclude from graduation.</p>
+            {makeCheckboxList(graduateStudents, graduateSelected, setGraduateSelected, 'select-all-graduate')}
+            <div className="flex gap-3 pt-2">
+              <Button className="flex-1 justify-center" onClick={executeGraduation} loading={graduateSaving} disabled={graduateSelected.size === 0}>
+                Graduate {graduateSelected.size} Student{graduateSelected.size !== 1 ? 's' : ''}
+              </Button>
+              <Button type="button" variant="ghost" onClick={() => setGraduateModal(null)}>Cancel</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* ── Add / Edit class modal ── */}
       <Modal
         open={modalOpen}
         onClose={() => setModal(false)}
@@ -278,16 +374,13 @@ export default function ClassesPage() {
           <div>
             <label className="label">Level (for ordering &amp; promotion)</label>
             <input type="number" className="input" placeholder="e.g. 1 = Creche, 2 = Nursery 1…" {...register('level')} />
-            <p className="text-xs text-fg-muted mt-1">Higher number = higher class. Used to determine promotion order.</p>
+            <p className="text-xs text-fg-muted mt-1">
+              Higher number = higher class. The class with the highest level gets a Graduate button instead of Promote.
+            </p>
+            {errors.level && <p className="field-error">{errors.level.message}</p>}
           </div>
-          <div>
-            <label className="label">Default Term Fee (GHS) *</label>
-            <input type="number" min="0" step="0.01" className="input" placeholder="0.00" {...register('term_fee_amount')} />
-            {errors.term_fee_amount && <p className="field-error">{errors.term_fee_amount.message}</p>}
-          </div>
-          <div>
-            <label className="label">Academic Year</label>
-            <input className="input" placeholder="e.g. 2024/2025" {...register('academic_year')} />
+          <div className="rounded bg-surface-alt border border-border px-3 py-2 text-xs text-fg-muted">
+            Fees are set per term in <strong>Terms → expand term → Class Fees</strong>, not here.
           </div>
           <div className="flex gap-3 pt-2">
             <Button type="submit" loading={isSubmitting} className="flex-1 justify-center">

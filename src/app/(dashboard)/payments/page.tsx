@@ -38,7 +38,7 @@ export default function PaymentsPage() {
   const [termFilter, setTermFilter] = useState(selectedTerm?.id ?? '')
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
-  const [receiptPayment, setReceiptPayment] = useState<{ payment: PaymentWithStudent; studentName: string; className?: string; outstanding?: number } | null>(null)
+  const [receiptPayment, setReceiptPayment] = useState<{ payment: PaymentWithStudent; studentName: string; className?: string } | null>(null)
   const [payModal, setPayModal] = useState(false)
   const [studentSearch, setStudentSearch] = useState('')
   const [studentResults, setStudentResults] = useState<StudentOption[]>([])
@@ -178,18 +178,12 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
     }
   }
 
-  async function openReceipt(p: PaymentWithStudent) {
-    const { data } = await supabase
-      .from('student_fee_summary')
-      .select('outstanding')
-      .eq('id', p.student_id)
-      .single()
+  function openReceipt(p: PaymentWithStudent) {
     setReceiptPayment({
       payment: p,
       studentName: p.students?.full_name ?? 'Unknown',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       className: (p.students?.classes as any)?.name ?? undefined,
-      outstanding: data ? Number(data.outstanding) : undefined,
     })
   }
 
@@ -299,7 +293,6 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
           schoolAddress={schoolAddress ?? undefined}
           schoolPhone={schoolPhone ?? undefined}
           schoolEmail={schoolEmail ?? undefined}
-          outstanding={receiptPayment.outstanding}
           termLabel={allTerms.find(t => t.id === receiptPayment.payment.term_id)?.label}
           onClose={() => setReceiptPayment(null)}
         />

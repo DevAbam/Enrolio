@@ -50,6 +50,9 @@ export function PaymentForm({ studentId, outstanding, onSuccess, onCancel }: Pay
 
     const receipt = values.receipt_number?.trim() || `REC-${Date.now()}`
 
+    // Snapshot the balance AFTER this payment so receipts never show a stale value
+    const balanceAfter = Math.max(0, outstanding - values.amount_paid)
+
     const { error } = await supabase.from('payments').insert({
       student_id:     studentId,
       school_id:      me!.school_id,
@@ -60,6 +63,7 @@ export function PaymentForm({ studentId, outstanding, onSuccess, onCancel }: Pay
       notes:          values.notes || null,
       recorded_by:    user!.id,
       term_id:        values.term_id || null,
+      balance_after:  balanceAfter,
     })
 
     if (error) {

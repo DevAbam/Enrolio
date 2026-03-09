@@ -16,7 +16,7 @@ const termSchema = z.object({
 })
 type TermForm = z.infer<typeof termSchema>
 
-type ClassRow = { id: string; name: string; term_fee_amount: number }
+type ClassRow = { id: string; name: string }
 type ClassTermFee = { class_id: string; fee_amount: number }
 
 export default function TermsPage() {
@@ -39,7 +39,7 @@ export default function TermsPage() {
   })
 
   const loadClasses = useCallback(async () => {
-    const { data } = await supabase.from('classes').select('id, name, term_fee_amount').order('level').order('name')
+    const { data } = await supabase.from('classes').select('id, name').order('level', { ascending: true, nullsFirst: false }).order('name')
     if (data) setClasses(data as ClassRow[])
   }, [supabase])
 
@@ -253,15 +253,16 @@ export default function TermsPage() {
 
                   {expandedTerm === term.id && (
                     <div className="border-t border-border px-4 py-3 bg-surface-alt">
-                      <p className="text-sm font-medium text-fg mb-3">Class fee overrides for this term (leave blank to use default class fee)</p>
+                      <p className="text-sm font-medium text-fg mb-1">Class Fees for this Term</p>
+                      <p className="text-xs text-fg-muted mb-3">Enter the fee for each class for this term. Leave blank for 0 (no charge).</p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
                         {classes.map(cls => (
                           <div key={cls.id}>
-                            <label className="block text-xs text-fg-muted mb-1">{cls.name} <span className="text-fg-subtle">(default: {cls.term_fee_amount})</span></label>
+                            <label className="block text-xs text-fg-muted mb-1">{cls.name}</label>
                             <input
                               type="number"
                               className="input text-sm"
-                              placeholder={String(cls.term_fee_amount)}
+                              placeholder="0.00"
                               value={feeInputs[cls.id] ?? ''}
                               onChange={e => setFeeInputs(prev => ({ ...prev, [cls.id]: e.target.value }))}
                               min={0}

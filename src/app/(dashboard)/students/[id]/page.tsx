@@ -47,6 +47,15 @@ type StudentWithExtras = StudentFeeSummary & {
   active_term_label?: string | null
 }
 
+interface ClassHistoryRow {
+  id: string
+  from_class_name: string | null
+  to_class_name: string | null
+  action: string
+  term_label: string | null
+  changed_at: string
+}
+
 export default function StudentDetailPage() {
   const { id }          = useParams<{ id: string }>()
   const searchParams    = useSearchParams()
@@ -56,6 +65,7 @@ export default function StudentDetailPage() {
   const [student, setStudent]           = useState<StudentWithExtras | null>(null)
   const [payments, setPayments]         = useState<Payment[]>([])
   const [classes,  setClasses]          = useState<Class[]>([])
+  const [classHistory, setClassHistory] = useState<ClassHistoryRow[]>([])
   const [loading,  setLoading]          = useState(true)
   const [payPage,  setPayPage]          = useState(1)
   const [editModal,    setEditModal]    = useState(searchParams.get('edit') === '1')
@@ -63,6 +73,7 @@ export default function StudentDetailPage() {
   const [receiptPayment, setReceiptPayment] = useState<Payment | null>(null)
   const [detailPayment,  setDetailPayment]  = useState<Payment | null>(null)
   const [promoting,    setPromoting]    = useState(false)
+  const [promoteConfirm, setPromoteConfirm] = useState<{ direction: 'up' | 'down'; targetClass: Class } | null>(null)
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -70,14 +81,17 @@ export default function StudentDetailPage() {
     let paymentsQuery = supabase.from('payments').select('*').eq('student_id', id)
       .order('payment_date', { ascending: false }).order('created_at', { ascending: false })
     if (selectedTerm?.id) paymentsQuery = paymentsQuery.eq('term_id', selectedTerm.id)
-    const [{ data: s }, { data: p }, { data: cls }] = await Promise.all([
+    const [{ data: s }, { data: p }, { data: cls }, { data: hist }] = await Promise.all([
       supabase.from('student_fee_summary').select('*').eq('id', id).single(),
       paymentsQuery,
       supabase.from('classes').select('*').order('level', { ascending: true, nullsFirst: false }).order('name'),
+      supabase.from('student_class_history').select('id, from_class_name, to_class_name, action, term_label, changed_at')
+        .eq('student_id', id).order('changed_at', { ascending: false }),
     ])
     setStudent(s as StudentWithExtras)
     setPayments(p ?? [])
     setClasses(cls ?? [])
+    setClassHistory((hist ?? []) as ClassHistoryRow[])
     setLoading(false)
   }, [supabase, id, selectedTerm?.id])
 
@@ -122,7 +136,7 @@ export default function StudentDetailPage() {
     load()
   }
 
-  async function promote(direction: 'up' | 'down') {
+  function promote(direction: 'up' | 'down') {
     if (!student) return
     const currentLevel = (student as StudentWithExtras).class_level
     if (currentLevel == null) {
@@ -135,12 +149,18 @@ export default function StudentDetailPage() {
       toast.error(direction === 'up' ? 'No higher class found. This may be the highest level.' : 'No lower class found.')
       return
     }
-    if (!confirm(`${direction === 'up' ? 'Promote' : 'Demote'} ${student.full_name} to ${targetClass.name}?`)) return
+    setPromoteConfirm({ direction, targetClass })
+  }
+
+  async function doPromote() {
+    if (!promoteConfirm) return
+    const { direction, targetClass } = promoteConfirm
+    setPromoteConfirm(null)
     setPromoting(true)
     const res = await fetch('/api/promote-student', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ studentId: id, targetClassId: targetClass.id }),
+      body:    JSON.stringify({ studentId: id, targetClassId: targetClass.id, direction }),
     })
     const data = await res.json()
     if (!res.ok) { toast.error(data.error) } else { toast.success(`Moved to ${targetClass.name}`); load() }
@@ -351,6 +371,37 @@ export default function StudentDetailPage() {
         )}
       </div>
 
+      {/* Class Movement History */}
+      {classHistory.length > 0 && (
+        <div className="card p-5">
+          <h3 className="font-semibold text-fg border-b border-border pb-2 mb-4">Class Movement History</h3>
+          <div className="space-y-2">
+            {classHistory.map(h => (
+              <div key={h.id} className="flex items-start gap-3 text-sm">
+                <span className={`mt-0.5 px-2 py-0.5 rounded text-xs font-medium capitalize ${
+                  h.action === 'promoted' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                  h.action === 'demoted'  ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
+                  'bg-accent-bg text-accent'
+                }`}>{h.action}</span>
+                <div className="flex-1">
+                  <p className="text-fg">
+                    {h.from_class_name ? (
+                      <><span className="text-fg-muted">{h.from_class_name}</span> → <span className="font-medium">{h.to_class_name}</span></>
+                    ) : (
+                      <span className="font-medium">{h.to_class_name}</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-fg-muted mt-0.5">
+                    {h.term_label && <span>{h.term_label} · </span>}
+                    {new Date(h.changed_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Payment History */}
       <div className="card overflow-hidden">
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
@@ -515,6 +566,26 @@ export default function StudentDetailPage() {
           </div>
         </Modal>
       )}
+
+      {/* Promote/Demote Confirmation Modal */}
+      <Modal open={!!promoteConfirm} onClose={() => setPromoteConfirm(null)} title={promoteConfirm?.direction === 'up' ? 'Promote Student' : 'Demote Student'}>
+        <div className="space-y-4">
+          <p className="text-sm text-fg">
+            {promoteConfirm?.direction === 'up' ? 'Promote' : 'Demote'}{' '}
+            <span className="font-semibold">{student?.full_name}</span> to{' '}
+            <span className="font-semibold">{promoteConfirm?.targetClass.name}</span>?
+            {promoteConfirm?.direction === 'down' && (
+              <span className="text-fg-muted"> This will move the student to a lower class.</span>
+            )}
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button variant="ghost" onClick={() => setPromoteConfirm(null)}>Cancel</Button>
+            <Button onClick={doPromote} loading={promoting}>
+              {promoteConfirm?.direction === 'up' ? 'Promote' : 'Demote'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Edit Modal */}
       <Modal open={editModal} onClose={() => setEditModal(false)} title="Edit Student" className="max-w-lg">

@@ -8,6 +8,8 @@ import { Plus, CheckCircle, Circle, ChevronDown, ChevronUp, Pencil, Trash2 } fro
 import { createClient } from '@/lib/supabase/client'
 import { useRole } from '@/contexts/RoleContext'
 import { useTerm, type AcademicTerm } from '@/lib/term-context'
+import { Modal } from '@/components/ui/Modal'
+import { Button } from '@/components/ui/Button'
 
 const termSchema = z.object({
   year:        z.coerce.number().min(2000).max(2100),
@@ -18,6 +20,7 @@ type TermForm = z.infer<typeof termSchema>
 
 type ClassRow = { id: string; name: string }
 type ClassTermFee = { class_id: string; fee_amount: number }
+type TeacherRow = { id: string; full_name: string; employee_number: string | null; staff_type: string }
 
 export default function TermsPage() {
   const supabase      = createClient()
@@ -30,9 +33,15 @@ export default function TermsPage() {
   const [classes, setClasses]             = useState<ClassRow[]>([])
   const [termFees, setTermFees]           = useState<Record<string, ClassTermFee[]>>({})
   const [feeInputs, setFeeInputs]         = useState<Record<string, string>>({})
-  const [savingFees, setSavingFees]       = useState(false)
-  const [settingActive, setSettingActive] = useState<string | null>(null)
+  const [savingFees, setSavingFees]                         = useState(false)
+  const [teachers, setTeachers]                             = useState<TeacherRow[]>([])
+  const [teacherSalaryInputs, setTeacherSalaryInputs]       = useState<Record<string, string>>({})
+  const [savingTeacherSalaries, setSavingTeacherSalaries]   = useState(false)
+  const [savingNonTeachingSalaries, setSavingNonTeachingSalaries] = useState(false)
+  const [settingActive, setSettingActive]         = useState<string | null>(null)
   const [deletingTerm, setDeletingTerm]   = useState<string | null>(null)
+  const [confirmActivate, setConfirmActivate] = useState<AcademicTerm | null>(null)
+  const [confirmDelete, setConfirmDelete]     = useState<AcademicTerm | null>(null)
 
   const { register, handleSubmit, reset, setValue, formState: { errors, isSubmitting } } = useForm<TermForm>({
     resolver: zodResolver(termSchema),
@@ -41,6 +50,11 @@ export default function TermsPage() {
   const loadClasses = useCallback(async () => {
     const { data } = await supabase.from('classes').select('id, name').order('level', { ascending: true, nullsFirst: false }).order('name')
     if (data) setClasses(data as ClassRow[])
+  }, [supabase])
+
+  const loadTeachers = useCallback(async () => {
+    const { data } = await supabase.from('teachers').select('id, full_name, employee_number, staff_type').eq('is_active', true).order('full_name')
+    if (data) setTeachers(data as TeacherRow[])
   }, [supabase])
 
   const loadTermFees = useCallback(async (termId: string) => {
@@ -55,7 +69,16 @@ export default function TermsPage() {
     }
   }, [supabase])
 
-  useEffect(() => { loadClasses() }, [loadClasses])
+  const loadTeacherSalaries = useCallback(async (termId: string) => {
+    const { data } = await supabase.from('teacher_term_salaries').select('teacher_id, salary_amount').eq('term_id', termId)
+    const inputs: Record<string, string> = {}
+    for (const s of (data ?? [])) {
+      inputs[s.teacher_id] = String(s.salary_amount)
+    }
+    setTeacherSalaryInputs(inputs)
+  }, [supabase])
+
+  useEffect(() => { loadClasses(); loadTeachers() }, [loadClasses, loadTeachers])
 
   async function onSubmit(values: TermForm) {
     if (editingTerm) {
@@ -80,8 +103,8 @@ export default function TermsPage() {
     reload()
   }
 
-  async function setActive(termId: string) {
-    if (!confirm('Activating this term will carry forward any outstanding balances from the current active term into the next term. Continue?')) return
+  async function doSetActive(termId: string) {
+    setConfirmActivate(null)
     setSettingActive(termId)
     const { error } = await supabase.rpc('activate_term_with_carryover', { p_new_term_id: termId })
     if (error) { toast.error(error.message); setSettingActive(null); return }
@@ -90,8 +113,8 @@ export default function TermsPage() {
     setSettingActive(null)
   }
 
-  async function deleteTerm(termId: string) {
-    if (!confirm('Delete this term? All fee overrides for this term will also be deleted.')) return
+  async function doDeleteTerm(termId: string) {
+    setConfirmDelete(null)
     setDeletingTerm(termId)
     const { error } = await supabase.from('academic_terms').delete().eq('id', termId)
     if (error) { toast.error(error.message) } else { toast.success('Term deleted'); reload() }
@@ -113,6 +136,30 @@ export default function TermsPage() {
     setSavingFees(false)
   }
 
+  async function saveStaffSalaries(termId: string, staffType: 'teaching' | 'non_teaching', setSaving: (v: boolean) => void) {
+    setSaving(true)
+    const schoolId = allTerms.find(t => t.id === termId)?.school_id ?? ''
+    const rows = teachers
+      .filter(t => t.staff_type === staffType && teacherSalaryInputs[t.id] !== undefined && teacherSalaryInputs[t.id] !== '')
+      .map(t => ({
+        teacher_id:    t.id,
+        term_id:       termId,
+        salary_amount: parseFloat(teacherSalaryInputs[t.id] || '0'),
+        school_id:     schoolId,
+      }))
+    const { error } = await supabase.from('teacher_term_salaries').upsert(rows, { onConflict: 'teacher_id,term_id' })
+    if (error) { toast.error(error.message) }
+    else { toast.success(`${staffType === 'teaching' ? 'Teaching' : 'Non-teaching'} staff salaries saved`) }
+    setSaving(false)
+  }
+
+  function saveTeacherSalaries(termId: string) {
+    return saveStaffSalaries(termId, 'teaching', setSavingTeacherSalaries)
+  }
+  function saveNonTeachingSalaries(termId: string) {
+    return saveStaffSalaries(termId, 'non_teaching', setSavingNonTeachingSalaries)
+  }
+
   function openEdit(term: AcademicTerm) {
     setEditingTerm(term)
     setValue('year', term.year)
@@ -127,6 +174,7 @@ export default function TermsPage() {
     } else {
       setExpandedTerm(termId)
       loadTermFees(termId)
+      loadTeacherSalaries(termId)
     }
   }
 
@@ -221,7 +269,7 @@ export default function TermsPage() {
                 <div key={term.id} className="card p-0 overflow-hidden">
                   <div className="flex items-center gap-3 px-4 py-3">
                     <button
-                      onClick={() => term.is_active ? undefined : setActive(term.id)}
+                      onClick={() => term.is_active ? undefined : setConfirmActivate(term)}
                       disabled={settingActive === term.id}
                       title={term.is_active ? 'Active term' : 'Set as active'}
                       className={term.is_active ? 'text-accent' : 'text-fg-subtle hover:text-accent transition-colors'}
@@ -238,7 +286,7 @@ export default function TermsPage() {
                     <div className="flex items-center gap-1">
                       <button onClick={() => openEdit(term)} className="btn-ghost p-1.5" title="Edit"><Pencil size={14} /></button>
                       <button
-                        onClick={() => deleteTerm(term.id)}
+                        onClick={() => setConfirmDelete(term)}
                         disabled={deletingTerm === term.id || term.is_active}
                         className="btn-ghost p-1.5 text-red-500 disabled:opacity-40"
                         title={term.is_active ? 'Cannot delete active term' : 'Delete'}
@@ -274,6 +322,66 @@ export default function TermsPage() {
                       <button onClick={() => saveTermFees(term.id)} disabled={savingFees} className="btn-primary text-sm">
                         {savingFees ? 'Saving…' : 'Save Fee Overrides'}
                       </button>
+
+                      {/* Teaching Staff Salaries */}
+                      {teachers.filter(t => t.staff_type === 'teaching').length > 0 && (
+                        <div className="mt-6 pt-5 border-t border-border">
+                          <p className="text-sm font-medium text-fg mb-1">Teaching Staff Salaries for this Term</p>
+                          <p className="text-xs text-fg-muted mb-3">Set the salary amount each teaching staff member should receive this term.</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                            {teachers.filter(t => t.staff_type === 'teaching').map(t => (
+                              <div key={t.id}>
+                                <label className="block text-xs text-fg-muted mb-1 truncate" title={t.full_name}>
+                                  {t.full_name}
+                                  {t.employee_number && <span className="ml-1 opacity-60">({t.employee_number})</span>}
+                                </label>
+                                <input
+                                  type="number"
+                                  className="input text-sm"
+                                  placeholder="0.00"
+                                  value={teacherSalaryInputs[t.id] ?? ''}
+                                  onChange={e => setTeacherSalaryInputs(prev => ({ ...prev, [t.id]: e.target.value }))}
+                                  min={0}
+                                  step={0.01}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <button onClick={() => saveTeacherSalaries(term.id)} disabled={savingTeacherSalaries} className="btn-primary text-sm">
+                            {savingTeacherSalaries ? 'Saving…' : 'Save Teaching Staff Salaries'}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Non-Teaching Staff Salaries */}
+                      {teachers.filter(t => t.staff_type === 'non_teaching').length > 0 && (
+                        <div className="mt-6 pt-5 border-t border-border">
+                          <p className="text-sm font-medium text-fg mb-1">Non-Teaching Staff Salaries for this Term</p>
+                          <p className="text-xs text-fg-muted mb-3">Set the salary amount each non-teaching staff member should receive this term.</p>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                            {teachers.filter(t => t.staff_type === 'non_teaching').map(t => (
+                              <div key={t.id}>
+                                <label className="block text-xs text-fg-muted mb-1 truncate" title={t.full_name}>
+                                  {t.full_name}
+                                  {t.employee_number && <span className="ml-1 opacity-60">({t.employee_number})</span>}
+                                </label>
+                                <input
+                                  type="number"
+                                  className="input text-sm"
+                                  placeholder="0.00"
+                                  value={teacherSalaryInputs[t.id] ?? ''}
+                                  onChange={e => setTeacherSalaryInputs(prev => ({ ...prev, [t.id]: e.target.value }))}
+                                  min={0}
+                                  step={0.01}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <button onClick={() => saveNonTeachingSalaries(term.id)} disabled={savingNonTeachingSalaries} className="btn-primary text-sm">
+                            {savingNonTeachingSalaries ? 'Saving…' : 'Save Non-Teaching Staff Salaries'}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -282,6 +390,32 @@ export default function TermsPage() {
           </div>
         ))}
       </div>
+
+      {/* Activate confirmation modal */}
+      <Modal open={!!confirmActivate} onClose={() => setConfirmActivate(null)} title="Activate Term">
+        <div className="space-y-4">
+          <p className="text-sm text-fg">
+            Activating <span className="font-semibold">{confirmActivate?.label}</span> will carry forward any outstanding balances from the current active term. This cannot be undone.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button variant="ghost" onClick={() => setConfirmActivate(null)}>Cancel</Button>
+            <Button onClick={() => confirmActivate && doSetActive(confirmActivate.id)}>Activate Term</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete confirmation modal */}
+      <Modal open={!!confirmDelete} onClose={() => setConfirmDelete(null)} title="Delete Term">
+        <div className="space-y-4">
+          <p className="text-sm text-fg">
+            Delete <span className="font-semibold">{confirmDelete?.label}</span>? All fee overrides for this term will also be deleted. This cannot be undone.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button variant="ghost" onClick={() => setConfirmDelete(null)}>Cancel</Button>
+            <Button variant="danger" onClick={() => confirmDelete && doDeleteTerm(confirmDelete.id)}>Delete Term</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

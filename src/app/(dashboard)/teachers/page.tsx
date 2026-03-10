@@ -17,9 +17,12 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { TableSkeleton } from '@/components/ui/Skeleton'
 import { SearchInput } from '@/components/ui/SearchInput'
 import { Pagination } from '@/components/ui/Pagination'
+import { cn } from '@/lib/utils/cn'
 import type { Teacher, Class } from '@/types'
 
 const PAGE_SIZE = 10
+
+type StaffType = 'teaching' | 'non_teaching'
 
 const teacherSchema = z.object({
   full_name: z.string().min(1, 'Full name is required'),
@@ -29,6 +32,7 @@ const teacherSchema = z.object({
   gender: z.enum(['male', 'female', 'other', '']).optional(),
   date_of_birth: z.string().optional(),
   class_id: z.string().optional(),
+  staff_type: z.enum(['teaching', 'non_teaching']),
 })
 type TeacherForm = z.infer<typeof teacherSchema>
 
@@ -52,6 +56,7 @@ interface TeacherWithUser extends Teacher {
 export default function TeachersPage() {
   const { isAdmin } = useRole()
   const router = useRouter()
+  const [staffType, setStaffType] = useState<StaffType>('teaching')
   const [teachers, setTeachers] = useState<TeacherWithUser[]>([])
   const [classes, setClasses] = useState<Class[]>([])
   const [loading, setLoading] = useState(true)
@@ -72,6 +77,7 @@ export default function TeachersPage() {
     let query = supabase
       .from('teachers')
       .select('*', { count: 'exact' })
+      .eq('staff_type', staffType)
       .order('full_name')
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
 
@@ -88,7 +94,7 @@ export default function TeachersPage() {
     setTotal(count ?? 0)
     setClasses(cData ?? [])
     setLoading(false)
-  }, [supabase, search, genderFilter, statusFilter, page])
+  }, [supabase, search, genderFilter, statusFilter, page, staffType])
 
   function clearFilters() {
     setSearch(''); setGenderFilter(''); setStatusFilter(''); setPage(1)
@@ -97,21 +103,33 @@ export default function TeachersPage() {
 
   useEffect(() => { load() }, [load])
 
-  const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<TeacherForm>({
+  // Reset page when staffType changes
+  useEffect(() => { setPage(1) }, [staffType])
+
+  const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm<TeacherForm>({
     resolver: zodResolver(teacherSchema),
+    defaultValues: { staff_type: 'teaching' },
   })
   const loginForm = useForm<LoginForm>({ resolver: zodResolver(loginSchema) })
   const pwForm = useForm<PwForm>({ resolver: zodResolver(pwSchema) })
 
+  const watchedStaffType = watch('staff_type')
+  const isTeachingForm = watchedStaffType === 'teaching'
+
   function openAdd() {
     setEditing(null)
-    reset({ full_name: '', phone: '', email: '', employee_number: '', gender: '', date_of_birth: '', class_id: '' })
+    reset({ full_name: '', phone: '', email: '', employee_number: '', gender: '', date_of_birth: '', class_id: '', staff_type: staffType })
     setModal(true)
   }
 
   function openEdit(t: TeacherWithUser) {
     setEditing(t)
-    reset({ full_name: t.full_name, phone: t.phone ?? '', email: t.email ?? '', employee_number: t.employee_number ?? '', gender: (t.gender as 'male' | 'female' | 'other' | '') ?? '', date_of_birth: (t as Teacher & { date_of_birth?: string }).date_of_birth ?? '', class_id: t.class_id ?? '' })
+    reset({
+      full_name: t.full_name, phone: t.phone ?? '', email: t.email ?? '',
+      employee_number: t.employee_number ?? '', gender: (t.gender as 'male' | 'female' | 'other' | '') ?? '',
+      date_of_birth: (t as Teacher & { date_of_birth?: string }).date_of_birth ?? '',
+      class_id: t.class_id ?? '', staff_type: (t.staff_type as StaffType) ?? 'teaching',
+    })
     setModal(true)
   }
 
@@ -126,6 +144,7 @@ export default function TeachersPage() {
   }
 
   async function onSubmit(values: TeacherForm) {
+    const isTeaching = values.staff_type === 'teaching'
     const payload = {
       full_name: values.full_name,
       phone: values.phone || null,
@@ -133,18 +152,19 @@ export default function TeachersPage() {
       employee_number: values.employee_number || null,
       gender: values.gender || null,
       date_of_birth: values.date_of_birth || null,
-      class_id: values.class_id || null,
+      class_id: isTeaching ? (values.class_id || null) : null,
+      staff_type: values.staff_type,
     }
     if (editing) {
       const { error } = await supabase.from('teachers').update(payload).eq('id', editing.id)
       if (error) { toast.error(error.message); return }
-      toast.success('Teacher updated')
+      toast.success(`${isTeaching ? 'Teaching' : 'Non-teaching'} staff updated`)
     } else {
       const { data: { user } } = await supabase.auth.getUser()
       const { data: me } = await supabase.from('users').select('school_id').eq('id', user!.id).single()
       const { error } = await supabase.from('teachers').insert({ ...payload, school_id: me!.school_id })
       if (error) { toast.error(error.message); return }
-      toast.success('Teacher added')
+      toast.success(`${isTeaching ? 'Teaching' : 'Non-teaching'} staff added`)
     }
     setModal(false)
     load()
@@ -166,7 +186,6 @@ export default function TeachersPage() {
     })
     const data = await res.json()
     if (!res.ok) { toast.error(data.error); setLoginSaving(false); return }
-    // Store temp password
     await supabase.from('teachers').update({ temp_password: values.password }).eq('id', loginModal.id)
     toast.success(`Login created for ${loginModal.full_name}`)
     setLoginModal(null)
@@ -193,37 +212,50 @@ export default function TeachersPage() {
     load()
   }
 
+  const isTeaching = staffType === 'teaching'
+  const pageTitle = isTeaching ? 'Teaching Staff' : 'Non-Teaching Staff'
+  const addLabel = isTeaching ? 'Add Teaching Staff' : 'Add Non-Teaching Staff'
+  const colCount = isAdmin ? (isTeaching ? 9 : 7) : (isTeaching ? 7 : 5)
+
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Teachers"
-        subtitle="Manage teaching staff"
-        action={isAdmin ? <Button icon={<Plus size={16} />} onClick={openAdd}>Add Teacher</Button> : undefined}
+        title="Staff"
+        subtitle={`Managing ${pageTitle.toLowerCase()}`}
+        action={isAdmin ? <Button icon={<Plus size={16} />} onClick={openAdd}>{addLabel}</Button> : undefined}
       />
+
+      {/* Staff type toggle */}
+      <div className="flex gap-1 p-1 bg-surface-alt rounded-lg w-fit border border-border">
+        <button
+          className={cn('px-4 py-1.5 rounded-md text-sm font-medium transition-colors', isTeaching ? 'bg-accent text-white' : 'text-fg-muted hover:text-fg')}
+          onClick={() => setStaffType('teaching')}
+        >
+          Teaching Staff
+        </button>
+        <button
+          className={cn('px-4 py-1.5 rounded-md text-sm font-medium transition-colors', !isTeaching ? 'bg-accent text-white' : 'text-fg-muted hover:text-fg')}
+          onClick={() => setStaffType('non_teaching')}
+        >
+          Non-Teaching Staff
+        </button>
+      </div>
 
       <div className="card p-4 flex flex-wrap gap-3 items-end">
         <div className="flex-1 min-w-[180px]">
           <SearchInput
-            placeholder="Search by name…"
+            placeholder={`Search by name…`}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
           />
         </div>
-        <select
-          className="input max-w-[150px]"
-          value={genderFilter}
-          onChange={(e) => { setGenderFilter(e.target.value); setPage(1) }}
-        >
+        <select className="input max-w-[150px]" value={genderFilter} onChange={(e) => { setGenderFilter(e.target.value); setPage(1) }}>
           <option value="">All Genders</option>
           <option value="male">Male</option>
           <option value="female">Female</option>
           <option value="other">Other</option>
         </select>
-        <select
-          className="input max-w-[150px]"
-          value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-        >
+        <select className="input max-w-[150px]" value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}>
           <option value="">All Statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
@@ -244,20 +276,21 @@ export default function TeachersPage() {
               <th>Phone</th>
               <th>Email</th>
               <th>Employee No.</th>
-              <th>Class</th>
+              {isTeaching && <th>Class</th>}
               <th>Status</th>
-              {isAdmin && <th>Login</th>}
+              {isAdmin && isTeaching && <th>Login</th>}
               {isAdmin && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <TableSkeleton rows={5} cols={isAdmin ? 9 : 7} />
+              <TableSkeleton rows={5} cols={colCount} />
             ) : teachers.length === 0 ? (
-              <tr><td colSpan={isAdmin ? 9 : 7}>
+              <tr><td colSpan={colCount}>
                 <EmptyState
-                  //  icon={<span>👨‍🏫</span>}
-                  title="No teachers found" action={isAdmin ? <Button variant="secondary" size="sm" onClick={openAdd}>Add Teacher</Button> : undefined} />
+                  title={`No ${pageTitle.toLowerCase()} found`}
+                  action={isAdmin ? <Button variant="secondary" size="sm" onClick={openAdd}>{addLabel}</Button> : undefined}
+                />
               </td></tr>
             ) : (
               teachers.map((t) => (
@@ -271,13 +304,15 @@ export default function TeachersPage() {
                   <td className="text-gray-500 dark:text-gray-400">{t.phone ?? '—'}</td>
                   <td className="text-gray-500 dark:text-gray-400">{t.email ?? '—'}</td>
                   <td className="text-gray-500 dark:text-gray-400">{t.employee_number ?? '—'}</td>
-                  <td className="text-gray-500 dark:text-gray-400">
-                    {classes.find((c) => c.id === t.class_id)?.name ?? '—'}
-                  </td>
+                  {isTeaching && (
+                    <td className="text-gray-500 dark:text-gray-400">
+                      {classes.find((c) => c.id === t.class_id)?.name ?? '—'}
+                    </td>
+                  )}
                   <td>
                     <Badge variant={t.is_active ? 'green' : 'gray'}>{t.is_active ? 'Active' : 'Inactive'}</Badge>
                   </td>
-                  {isAdmin && (
+                  {isAdmin && isTeaching && (
                     <td onClick={e => e.stopPropagation()}>
                       {t.user_id
                         ? <Badge variant="green">Has Login</Badge>
@@ -295,7 +330,7 @@ export default function TeachersPage() {
                         <button onClick={() => openEdit(t)} className="btn-ghost p-2 rounded-lg" title="Edit">
                           <Pencil size={15} />
                         </button>
-                        {t.user_id && (
+                        {isTeaching && t.user_id && (
                           <button onClick={() => openPw(t)} className="btn-ghost p-2 rounded-lg" title="Change password">
                             <Lock size={15} />
                           </button>
@@ -318,9 +353,24 @@ export default function TeachersPage() {
         <Pagination page={page} pageSize={PAGE_SIZE} total={total} onPageChange={setPage} />
       </div>
 
-      {/* Add/Edit Teacher Modal */}
-      <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Edit Teacher' : 'Add Teacher'}>
+      {/* Add/Edit Staff Modal */}
+      <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Edit Staff' : 'Add Staff'}>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* Staff type selector */}
+          <div>
+            <label className="label">Staff Type *</label>
+            <div className="flex gap-1 p-1 bg-surface-alt rounded-lg border border-border w-fit mt-1">
+              <label className={cn('px-3 py-1 rounded-md text-sm font-medium cursor-pointer transition-colors', watchedStaffType === 'teaching' ? 'bg-accent text-white' : 'text-fg-muted')}>
+                <input type="radio" value="teaching" {...register('staff_type')} className="sr-only" />
+                Teaching
+              </label>
+              <label className={cn('px-3 py-1 rounded-md text-sm font-medium cursor-pointer transition-colors', watchedStaffType === 'non_teaching' ? 'bg-accent text-white' : 'text-fg-muted')}>
+                <input type="radio" value="non_teaching" {...register('staff_type')} className="sr-only" />
+                Non-Teaching
+              </label>
+            </div>
+          </div>
+
           <div>
             <label className="label">Full Name *</label>
             <input className="input" placeholder="John Mensah" {...register('full_name')} />
@@ -332,7 +382,7 @@ export default function TeachersPage() {
           </div>
           <div>
             <label className="label">Email</label>
-            <input type="email" className="input" placeholder="teacher@school.com" {...register('email')} />
+            <input type="email" className="input" placeholder="staff@school.com" {...register('email')} />
             {errors.email && <p className="field-error">{errors.email.message}</p>}
           </div>
           <div>
@@ -354,7 +404,7 @@ export default function TeachersPage() {
               <input type="date" className="input" {...register('date_of_birth')} />
             </div>
           </div>
-          {editing && (
+          {editing && isTeachingForm && (
             <div>
               <label className="label">Assigned Class</label>
               <select className="input" {...register('class_id')}>
@@ -365,14 +415,14 @@ export default function TeachersPage() {
           )}
           <div className="flex gap-3 pt-2">
             <Button type="submit" loading={isSubmitting} className="flex-1 justify-center">
-              {editing ? 'Save Changes' : 'Add Teacher'}
+              {editing ? 'Save Changes' : 'Add Staff'}
             </Button>
             <Button type="button" variant="ghost" onClick={() => setModal(false)}>Cancel</Button>
           </div>
         </form>
       </Modal>
 
-      {/* Create Login Modal */}
+      {/* Create Login Modal (teaching staff only) */}
       <Modal open={!!loginModal} onClose={() => setLoginModal(null)} title={`Create Login — ${loginModal?.full_name}`}>
         <form onSubmit={loginForm.handleSubmit(onCreateLogin)} className="space-y-4">
           <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -407,7 +457,7 @@ export default function TeachersPage() {
       {/* Change Password Modal */}
       <Modal open={!!pwModal} onClose={() => setPwModal(null)} title={`Change Password — ${pwModal?.full_name}`}>
         <form onSubmit={pwForm.handleSubmit(onChangePassword)} className="space-y-4">
-          <p className="text-sm text-fg-muted">Set a new login password for this teacher.</p>
+          <p className="text-sm text-fg-muted">Set a new login password for this staff member.</p>
           <div>
             <label className="label">New Password *</label>
             <input type="text" className="input" placeholder="Min 6 characters" {...pwForm.register('newPassword')} />

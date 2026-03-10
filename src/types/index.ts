@@ -23,7 +23,7 @@ export interface Teacher {
   id: string; school_id: string; full_name: string; phone?: string
   email?: string; employee_number?: string; gender?: string; is_active: boolean
   user_id?: string | null; class_id?: string | null; salary_amount: number
-  date_of_birth?: string; photo_url?: string
+  date_of_birth?: string; photo_url?: string; staff_type?: string
   created_at: string; updated_at: string
 }
 

@@ -1,11 +1,12 @@
 'use client'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, Users, UserCheck, BookOpen,
-  CreditCard, ClipboardList, MessageSquare, GraduationCap, X, Banknote, CalendarDays, Settings
+  CreditCard, ClipboardList, MessageSquare, GraduationCap, X, Banknote, CalendarDays, Settings, LogOut
 } from 'lucide-react'
 import { cn } from '@/lib/utils/cn'
+import { createClient } from '@/lib/supabase/client'
 import type { UserRole } from '@/types'
 
 interface SidebarProps {
@@ -31,7 +32,7 @@ const allNavSections: { label: string; items: NavItem[] }[] = [
     items: [
       { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant'], exact: false },
       { href: '/students', label: 'Students', icon: GraduationCap, roles: ['admin', 'accountant', 'teacher'], exact: false },
-      { href: '/teachers', label: 'Teachers', icon: Users, roles: ['admin'], exact: true },
+      { href: '/teachers', label: 'Staff', icon: Users, roles: ['admin'], exact: true },
       { href: '/classes', label: 'Classes', icon: BookOpen, roles: ['admin', 'accountant'], exact: false },
       { href: '/terms', label: 'Terms', icon: CalendarDays, roles: ['admin'], exact: false },
     ],
@@ -40,14 +41,14 @@ const allNavSections: { label: string; items: NavItem[] }[] = [
     label: 'FINANCE',
     items: [
       { href: '/payments', label: 'Fee Payments', icon: CreditCard, roles: ['admin', 'accountant'], exact: false },
-      { href: '/teachers/salaries', label: 'Teacher Salaries', icon: Banknote, roles: ['admin'], exact: false },
+      { href: '/teachers/salaries', label: 'Staff Salaries', icon: Banknote, roles: ['admin'], exact: false },
     ],
   },
   {
     label: 'ATTENDANCE',
     items: [
       { href: '/attendance/students', label: 'Students', icon: ClipboardList, roles: ['admin', 'accountant', 'teacher'], exact: false },
-      { href: '/attendance/teachers', label: 'Teachers', icon: UserCheck, roles: ['admin', 'accountant'], exact: false },
+      { href: '/attendance/teachers', label: 'Staff', icon: UserCheck, roles: ['admin', 'accountant'], exact: false },
     ],
   },
   {
@@ -60,6 +61,13 @@ const allNavSections: { label: string; items: NavItem[] }[] = [
 
 export function Sidebar({ schoolName, adminName, role, mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
+
+  async function handleLogout() {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   const navSections = allNavSections
     .map((section) => ({
@@ -136,6 +144,15 @@ export function Sidebar({ schoolName, adminName, role, mobileOpen = false, onMob
             <Settings size={16} />
             Settings
           </Link>
+        )}
+        {role !== 'admin' && (
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors duration-150 w-full text-fg-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+          >
+            <LogOut size={16} />
+            Logout
+          </button>
         )}
       </div>
     </div>

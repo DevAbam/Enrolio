@@ -13,11 +13,13 @@ import {
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { useRole } from '@/contexts/RoleContext'
+import { useTerm } from '@/lib/term-context'
 import { StatCard } from '@/components/ui/StatCard'
 import { Table } from '@/components/ui/Table'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Button } from '@/components/ui/Button'
+import { Pagination } from '@/components/ui/Pagination'
 import { formatCurrency } from '@/lib/utils/currency'
 import { today } from '@/lib/utils/date'
 import type { SchoolRevenueSummary, StudentFeeSummary } from '@/types'
@@ -297,35 +299,28 @@ function AdminDashboard() {
   const [loading,    setLoading]    = useState(true)
   const [chartYear,  setChartYear]  = useState(now.getFullYear())
   const [weekOffset, setWeekOffset] = useState(0) // 0 = current week, 1 = prev week, etc.
+  const [defaulterPage, setDefaulterPage] = useState(1)
+  const [defaulterClassFilter, setDefaulterClassFilter] = useState('')
+  const DEFAULTER_PAGE_SIZE = 10
   const supabase = createClient()
+  const { selectedTerm, activeTerm } = useTerm()
 
   // ── Main data: KPIs, today's attendance, class fees ──────────────────────
   useEffect(() => {
     async function load() {
       setLoading(true)
+      setDefaulterPage(1)
+      setDefaulterClassFilter('')
       const todayStr = today()
+      const isActiveTerm = !selectedTerm || selectedTerm.id === activeTerm?.id
 
-      const [
-        { data: rev, error: revErr },
-        { data: defs },
-        { data: sAtt },
-        { data: tAtt },
-        { data: allFees },
-        { data: sBirths },
-        { data: tBirths },
-      ] = await Promise.all([
-        supabase.from('school_revenue_summary').select('*').single(),
-        supabase.from('student_fee_summary').select('*').gt('outstanding', 0).eq('is_active', true).order('outstanding', { ascending: false }).limit(20),
+      // ── Attendance + birthdays (always the same) ──────────────────────────
+      const [{ data: sAtt }, { data: tAtt }, { data: sBirths }, { data: tBirths }] = await Promise.all([
         supabase.from('student_attendance').select('status').eq('attendance_date', todayStr),
         supabase.from('teacher_attendance').select('status').eq('attendance_date', todayStr),
-        supabase.from('student_fee_summary').select('class_name, total_paid, outstanding').eq('is_active', true),
         supabase.from('students').select('id, full_name, date_of_birth').eq('is_active', true).not('date_of_birth', 'is', null),
         supabase.from('teachers').select('id, full_name, date_of_birth').eq('is_active', true).not('date_of_birth', 'is', null),
       ])
-
-      if (revErr && revErr.code !== 'PGRST116') toast.error('Error loading revenue')
-      setRevenue(rev ?? null)
-      setDefaulters(defs ?? [])
 
       const sTotal = sAtt?.length ?? 0
       const sPresent = sAtt?.filter((a) => a.status === 'present' || a.status === 'late').length ?? 0
@@ -334,15 +329,6 @@ function AdminDashboard() {
       const tPresent = tAtt?.filter((a) => a.status === 'present' || a.status === 'late').length ?? 0
       setTeacherAtt({ present: tPresent, absent: tTotal - tPresent, total: tTotal })
 
-      const classMap = new Map<string, { paid: number; outstanding: number }>()
-      allFees?.forEach((s) => {
-        const name = s.class_name ?? 'No Class'
-        const ex = classMap.get(name) ?? { paid: 0, outstanding: 0 }
-        classMap.set(name, { paid: ex.paid + Number(s.total_paid), outstanding: ex.outstanding + Number(s.outstanding) })
-      })
-      setClassFees(Array.from(classMap.entries()).map(([name, v]) => ({ name, ...v })))
-
-      // Birthday processing
       const upcoming: BirthdayEntry[] = []
       for (const s of sBirths ?? []) {
         if (!s.date_of_birth) continue
@@ -356,10 +342,88 @@ function AdminDashboard() {
       }
       setBirthdays(upcoming.sort((a, b) => a.days - b.days))
 
+      if (isActiveTerm) {
+        // ── Active term: use existing views ─────────────────────────────────
+        const [{ data: rev, error: revErr }, { data: defs }, { data: allFees }] = await Promise.all([
+          supabase.from('school_revenue_summary').select('*').single(),
+          supabase.from('student_fee_summary').select('*').gt('outstanding', 0).eq('is_active', true).eq('is_graduated', false).order('outstanding', { ascending: false }).limit(200),
+          supabase.from('student_fee_summary').select('class_name, total_paid, outstanding').eq('is_active', true),
+        ])
+        if (revErr && revErr.code !== 'PGRST116') toast.error('Error loading revenue')
+        setRevenue(rev ?? null)
+        setDefaulters(defs ?? [])
+
+        const classMap = new Map<string, { paid: number; outstanding: number }>()
+        allFees?.forEach((s) => {
+          const name = s.class_name ?? 'No Class'
+          const ex = classMap.get(name) ?? { paid: 0, outstanding: 0 }
+          classMap.set(name, { paid: ex.paid + Number(s.total_paid), outstanding: ex.outstanding + Number(s.outstanding) })
+        })
+        setClassFees(Array.from(classMap.entries()).map(([name, v]) => ({ name, ...v })))
+      } else {
+        // ── Non-active term: query underlying tables ─────────────────────────
+        const termId = selectedTerm!.id
+        const [{ data: enrollments }, { data: termFeesData }, { data: termPayments }, { data: studentsList }, { data: classesList }] = await Promise.all([
+          supabase.from('student_enrollments').select('student_id, class_id').eq('term_id', termId),
+          supabase.from('class_term_fees').select('class_id, fee_amount').eq('term_id', termId),
+          supabase.from('payments').select('amount_paid, student_id').eq('term_id', termId),
+          supabase.from('students').select('id, full_name, parent_phone, is_active, is_graduated').eq('is_active', true).eq('is_graduated', false),
+          supabase.from('classes').select('id, name'),
+        ])
+
+        const feeMap = new Map((termFeesData ?? []).map(f => [f.class_id, Number(f.fee_amount)]))
+        const payMap = new Map<string, number>()
+        ;(termPayments ?? []).forEach(p => {
+          payMap.set(p.student_id, (payMap.get(p.student_id) ?? 0) + Number(p.amount_paid))
+        })
+        const studentMap = new Map((studentsList ?? []).map(s => [s.id, s]))
+        const classNameMap = new Map((classesList ?? []).map(c => [c.id, c.name]))
+
+        let expected = 0, collected = 0
+        const defList: StudentFeeSummary[] = []
+        const classMap = new Map<string, { paid: number; outstanding: number }>()
+
+        ;(enrollments ?? []).forEach(e => {
+          const student = studentMap.get(e.student_id)
+          if (!student) return
+          const fee = feeMap.get(e.class_id) ?? 0
+          const paid = Math.min(payMap.get(e.student_id) ?? 0, fee)
+          const outstanding = Math.max(0, fee - (payMap.get(e.student_id) ?? 0))
+          expected += fee
+          collected += paid
+          const className = classNameMap.get(e.class_id) ?? undefined
+          if (outstanding > 0) {
+            defList.push({
+              id: student.id, school_id: '', full_name: student.full_name,
+              parent_phone: student.parent_phone ?? undefined,
+              is_active: true, is_graduated: false,
+              class_id: e.class_id, class_name: className,
+              term_fee_amount: fee, discount_amount: 0, carried_over_balance: 0,
+              total_owed: fee, total_paid: paid, outstanding,
+            } as StudentFeeSummary)
+          }
+          const name = className ?? 'No Class'
+          const ex = classMap.get(name) ?? { paid: 0, outstanding: 0 }
+          classMap.set(name, { paid: ex.paid + paid, outstanding: ex.outstanding + outstanding })
+        })
+
+        setRevenue({
+          school_id: termId,
+          total_active_students: enrollments?.length ?? 0,
+          expected_revenue: expected,
+          collected_revenue: collected,
+          outstanding_revenue: Math.max(0, expected - collected),
+          defaulters_count: defList.length,
+        })
+        setDefaulters(defList.sort((a, b) => b.outstanding - a.outstanding))
+        setClassFees(Array.from(classMap.entries()).map(([name, v]) => ({ name, ...v })))
+      }
+
       setLoading(false)
     }
     load()
-  }, [supabase])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supabase, selectedTerm?.id])
 
   // ── Monthly revenue: reloads when chartYear changes ───────────────────────
   useEffect(() => {
@@ -479,7 +543,12 @@ function AdminDashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" strokeOpacity={0.7} vertical={false} />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false}
-                  tickFormatter={(v) => `₵${(v / 1000).toFixed(0)}k`} width={42} />
+                  tickFormatter={(v) => {
+                    if (v === 0) return '0'
+                    if (v >= 1000000) return `GHS ${(v / 1000000).toFixed(1)}M`
+                    if (v >= 1000) return `GHS ${(v / 1000).toFixed(0)}k`
+                    return `GHS ${v}`
+                  }} width={64} />
                 <Tooltip content={<RevenueTooltip />} cursor={{ stroke: G600, strokeWidth: 1, strokeDasharray: '4 4' }} />
                 <Area type="monotone" dataKey="collected" stroke={G600} strokeWidth={2.5}
                   fill="url(#revGrad)"
@@ -632,54 +701,80 @@ function AdminDashboard() {
       )}
 
       {/* ── Row 5: Defaulters table ─────────────────────────────────────────── */}
+      {(() => {
+        const uniqueClasses = Array.from(new Set(defaulters.map(d => d.class_name).filter(Boolean))) as string[]
+        const filteredDefaulters = defaulterClassFilter
+          ? defaulters.filter(d => d.class_name === defaulterClassFilter)
+          : defaulters
+        return (
       <div className="card overflow-hidden">
-        <div className="px-6 py-4 flex items-center justify-between">
+        <div className="px-6 py-4 flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h2 className="section-title">Students with Outstanding Fees</h2>
             <p className="text-xs text-fg-subtle mt-0.5">
-              {defaulters.length} student{defaulters.length !== 1 ? 's' : ''} with unpaid balances
+              {filteredDefaulters.length} student{filteredDefaulters.length !== 1 ? 's' : ''} with unpaid balances
+              {selectedTerm && selectedTerm.id !== activeTerm?.id && (
+                <span className="ml-2 text-accent font-medium">· {selectedTerm.label}</span>
+              )}
             </p>
           </div>
-          <Link href="/sms?tab=bulk">
-            <button className="btn-secondary text-xs px-3 py-1.5">Send All Reminders</button>
-          </Link>
+          <div className="flex items-center gap-3 flex-wrap">
+            {uniqueClasses.length > 1 && (
+              <select
+                className="input text-sm max-w-[160px] py-1"
+                value={defaulterClassFilter}
+                onChange={e => { setDefaulterClassFilter(e.target.value); setDefaulterPage(1) }}
+              >
+                <option value="">All Classes</option>
+                {uniqueClasses.sort().map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            )}
+            <Link href="/sms?tab=bulk">
+              <button className="btn-secondary text-xs px-3 py-1.5">Send All Reminders</button>
+            </Link>
+          </div>
         </div>
         {loading ? (
           <div className="p-5 space-y-3">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-10" />)}</div>
         ) : defaulters.length === 0 ? (
           <EmptyState icon={<CheckCircle size={48} className="text-accent" />} title="All fees are up to date" description="No students have outstanding balances" />
         ) : (
-          <Table>
-            <thead>
-              <tr>
-                <th>Name</th><th>Class</th><th>Term Fee</th>
-                <th>Paid</th><th>Outstanding</th><th>Parent Phone</th><th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {defaulters.map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <Link href={`/students/${s.id}`} className="font-medium hover:text-accent">
-                      {s.full_name}
-                    </Link>
-                  </td>
-                  <td className="text-gray-500">{s.class_name ?? '—'}</td>
-                  <td>{formatCurrency(Number(s.term_fee_amount))}</td>
-                  <td className="text-accent-fg font-medium">{formatCurrency(Number(s.total_paid))}</td>
-                  <td><span className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(Number(s.outstanding))}</span></td>
-                  <td className="text-gray-500">{s.parent_phone ?? '—'}</td>
-                  <td>
-                    <Link href={`/sms?tab=single&studentId=${s.id}`}>
-                      <button className="btn-ghost p-1.5 rounded"><MessageSquare size={15} /></button>
-                    </Link>
-                  </td>
+          <>
+            <Table>
+              <thead>
+                <tr>
+                  <th>Name</th><th>Class</th><th>Term Fee</th>
+                  <th>Paid</th><th>Outstanding</th><th>Parent Phone</th><th></th>
                 </tr>
-              ))}
-            </tbody>
-          </Table>
+              </thead>
+              <tbody>
+                {filteredDefaulters.slice((defaulterPage - 1) * DEFAULTER_PAGE_SIZE, defaulterPage * DEFAULTER_PAGE_SIZE).map((s) => (
+                  <tr key={s.id}>
+                    <td>
+                      <Link href={`/students/${s.id}`} className="font-medium hover:text-accent">
+                        {s.full_name}
+                      </Link>
+                    </td>
+                    <td className="text-gray-500">{s.class_name ?? '—'}</td>
+                    <td>{formatCurrency(Number(s.term_fee_amount))}</td>
+                    <td className="text-accent-fg font-medium">{formatCurrency(Number(s.total_paid))}</td>
+                    <td><span className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(Number(s.outstanding))}</span></td>
+                    <td className="text-gray-500">{s.parent_phone ?? '—'}</td>
+                    <td>
+                      <Link href={`/sms?tab=single&studentId=${s.id}`}>
+                        <button className="btn-ghost p-1.5 rounded"><MessageSquare size={15} /></button>
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+            <Pagination page={defaulterPage} pageSize={DEFAULTER_PAGE_SIZE} total={filteredDefaulters.length} onPageChange={setDefaulterPage} />
+          </>
         )}
       </div>
+        )
+      })()}
     </div>
   )
 }

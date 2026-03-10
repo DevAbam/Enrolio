@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { Table } from '@/components/ui/Table'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { TableSkeleton } from '@/components/ui/Skeleton'
-import { today, formatDate } from '@/lib/utils/date'
+import { today, formatDate, formatDateLong } from '@/lib/utils/date'
 import { downloadExcel } from '@/lib/utils/csv'
 import { cn } from '@/lib/utils/cn'
 import type { Student, Class, AttendanceStatus } from '@/types'
@@ -27,7 +27,7 @@ interface HistoryRecord {
   student_id: string
   status: AttendanceStatus
   notes: string | null
-  students?: { full_name: string; admission_number: string | null } | null
+  students?: { full_name: string; admission_number: string | null; class_id?: string | null } | null
 }
 
 const statuses: { value: AttendanceStatus; label: string; activeClass: string }[] = [
@@ -65,6 +65,8 @@ export default function StudentAttendancePage() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyStudentSearch, setHistoryStudentSearch] = useState('')
   const [historySummaryMode, setHistorySummaryMode] = useState(false)
+  const [isAlreadyMarked, setIsAlreadyMarked] = useState(false)
+  const [historyFilterClassId, setHistoryFilterClassId] = useState('')
 
   // ── init ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -100,6 +102,8 @@ export default function StudentAttendancePage() {
         .eq('attendance_date', date)
         .in('student_id', studentList.map(s => s.id))
 
+      setIsAlreadyMarked((att?.length ?? 0) > 0)
+
       const map = new Map<string, AttendanceRecord>()
       studentList.forEach(s => {
         const found = att?.find(a => a.student_id === s.id)
@@ -111,6 +115,7 @@ export default function StudentAttendancePage() {
       })
       setRecords(map)
     } else {
+      setIsAlreadyMarked(false)
       setRecords(new Map())
     }
     setLoading(false)
@@ -125,7 +130,7 @@ export default function StudentAttendancePage() {
 
     let query = supabase
       .from('student_attendance')
-      .select('*, students(full_name, admission_number)')
+      .select('*, students(full_name, admission_number, class_id)')
       .order('attendance_date', { ascending: false })
 
     if (historyTermId) {
@@ -199,7 +204,7 @@ export default function StudentAttendancePage() {
       } else {
         const headers = ['Date', 'Student Name', 'Admission No.', 'Status', 'Notes']
         const rows = filteredHistory.map(r => [
-          formatDate(r.attendance_date),
+          formatDateLong(r.attendance_date),
           r.students?.full_name ?? '', r.students?.admission_number ?? '',
           r.status, r.notes ?? '',
         ])
@@ -212,7 +217,7 @@ export default function StudentAttendancePage() {
     const headers = ['Date', 'Student Name', 'Admission No.', 'Class', 'Status', 'Notes']
     const rows = students.map(s => {
       const rec = records.get(s.id)
-      return [formatDate(date), s.full_name, s.admission_number ?? '', className, rec?.status ?? '', rec?.notes ?? '']
+      return [formatDateLong(date), s.full_name, s.admission_number ?? '', className, rec?.status ?? '', rec?.notes ?? '']
     })
     downloadExcel(`student-attendance-${date}`, headers, rows)
   }
@@ -232,12 +237,12 @@ export default function StudentAttendancePage() {
   const currentYear = new Date().getFullYear()
   const yearOptions = Array.from({ length: 8 }, (_, i) => currentYear - 3 + i)
 
-  // Filter history by class (client-side by student name since class isn't on attendance rows directly)
   const filteredHistory = historyData.filter(r => {
     if (historyStudentSearch) {
       const name = r.students?.full_name?.toLowerCase() ?? ''
       if (!name.includes(historyStudentSearch.toLowerCase())) return false
     }
+    if (historyFilterClassId && r.students?.class_id !== historyFilterClassId) return false
     return true
   })
 
@@ -362,19 +367,22 @@ export default function StudentAttendancePage() {
               )}
             </div>
 
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap items-center">
+              {classId && isAlreadyMarked && (
+                <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2.5 py-1 rounded-full font-medium border border-green-200 dark:border-green-800">
+                  ✓ Already marked for this date
+                </span>
+              )}
               {classId && records.size > 0 && (
                 <>
                   <Button variant="secondary" onClick={markAllPresent} disabled={loading}>
                     Mark All Present
                   </Button>
-                  <Button onClick={save} loading={saving} disabled={records.size === 0}>
-                    Save Attendance
+                  <Button onClick={save} loading={saving} disabled={records.size === 0 || isAlreadyMarked}>
+                    {isAlreadyMarked ? 'Already Saved' : 'Save Attendance'}
                   </Button>
                 </>
               )}
-              <Button variant="ghost" icon={<Printer size={15} />} onClick={() => window.print()} disabled={loading}>Print</Button>
-              <Button variant="ghost" icon={<Download size={15} />} onClick={handleExportCSV} disabled={loading || students.length === 0}>Export</Button>
             </div>
           </div>
 
@@ -513,6 +521,20 @@ export default function StudentAttendancePage() {
                   {yearOptions.map(y => <option key={y} value={String(y)}>{y}</option>)}
                 </select>
               </div>
+              {/* Class filter — only show when a term or year is selected */}
+              {(historyTermId || historyYear) && isAdmin && classes.length > 0 && (
+                <div>
+                  <label className="label text-xs mb-1">Class</label>
+                  <select
+                    className="input max-w-[160px]"
+                    value={historyFilterClassId}
+                    onChange={e => setHistoryFilterClassId(e.target.value)}
+                  >
+                    <option value="">All Classes</option>
+                    {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              )}
               {/* Student name search */}
               <div>
                 <label className="label text-xs mb-1">Search student</label>

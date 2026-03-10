@@ -10,16 +10,18 @@ import { Button } from '@/components/ui/Button'
 import { Table } from '@/components/ui/Table'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { TableSkeleton } from '@/components/ui/Skeleton'
-import { today, formatDate } from '@/lib/utils/date'
+import { today, formatDate, formatDateLong } from '@/lib/utils/date'
 import { downloadExcel } from '@/lib/utils/csv'
 import { cn } from '@/lib/utils/cn'
 import type { Teacher, AttendanceStatus } from '@/types'
+
+type StaffType = 'teaching' | 'non_teaching'
 
 interface AttendanceRecord { teacher_id: string; status: AttendanceStatus }
 
 interface HistoryRecord {
   id: string; attendance_date: string; teacher_id: string; status: AttendanceStatus
-  teachers?: { full_name: string; employee_number: string | null } | null
+  teachers?: { full_name: string; employee_number: string | null; staff_type: string } | null
 }
 
 const statuses: { value: AttendanceStatus; label: string; activeClass: string }[] = [
@@ -34,6 +36,7 @@ type Mode = 'mark' | 'history'
 export default function TeacherAttendancePage() {
   const { isAdmin, schoolName, schoolLogoUrl } = useRole()
   const { activeTerm, allTerms } = useTerm()
+  const [staffType, setStaffType] = useState<StaffType>('teaching')
   const [mode, setMode] = useState<Mode>('mark')
   const supabase = createClient()
 
@@ -50,24 +53,29 @@ export default function TeacherAttendancePage() {
   const [historyData, setHistoryData] = useState<HistoryRecord[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [summaryMode, setSummaryMode] = useState(false)
+  const [historyTeacherSearch, setHistoryTeacherSearch] = useState('')
+  const [isAlreadyMarked, setIsAlreadyMarked] = useState(false)
 
   const loadMarkMode = useCallback(async () => {
     setLoading(true)
     const { data: teacherList } = await supabase
-      .from('teachers').select('*').eq('is_active', true).order('full_name')
+      .from('teachers').select('*').eq('is_active', true).eq('staff_type', staffType).order('full_name')
     setTeachers(teacherList ?? [])
     if (teacherList && teacherList.length > 0) {
       const { data: att } = await supabase.from('teacher_attendance').select('*')
         .eq('attendance_date', date).in('teacher_id', teacherList.map(t => t.id))
+      setIsAlreadyMarked((att?.length ?? 0) > 0)
       const map = new Map<string, AttendanceRecord>()
       teacherList.forEach(t => {
         const found = att?.find(a => a.teacher_id === t.id)
         map.set(t.id, { teacher_id: t.id, status: (found?.status as AttendanceStatus) ?? 'present' })
       })
       setRecords(map)
+    } else {
+      setIsAlreadyMarked(false)
     }
     setLoading(false)
-  }, [supabase, date])
+  }, [supabase, date, staffType])
 
   useEffect(() => { if (mode === 'mark') loadMarkMode() }, [loadMarkMode, mode])
 
@@ -75,7 +83,7 @@ export default function TeacherAttendancePage() {
     if (!historyTermId && !historyYear) { setHistoryData([]); return }
     setHistoryLoading(true)
     let query = supabase.from('teacher_attendance')
-      .select('*, teachers(full_name, employee_number)')
+      .select('*, teachers(full_name, employee_number, staff_type)')
       .order('attendance_date', { ascending: false })
     if (historyTermId) query = query.eq('term_id', historyTermId)
     else if (historyYear) query = query.gte('attendance_date', `${historyYear}-01-01`).lte('attendance_date', `${historyYear}-12-31`)
@@ -115,7 +123,7 @@ export default function TeacherAttendancePage() {
     }))
     const { error } = await supabase.from('teacher_attendance').upsert(rows, { onConflict: 'teacher_id,attendance_date' })
     if (error) toast.error('Failed to save: ' + error.message)
-    else toast.success(`Attendance saved for ${rows.length} teachers`)
+    else toast.success(`Attendance saved for ${rows.length} staff member${rows.length !== 1 ? 's' : ''}`)
     setSaving(false)
   }
 
@@ -131,7 +139,7 @@ export default function TeacherAttendancePage() {
         downloadExcel('teacher-attendance-summary', headers, rows)
       } else {
         const headers = ['Date', 'Teacher Name', 'Employee No.', 'Status']
-        const rows = historyData.map(r => [formatDate(r.attendance_date), r.teachers?.full_name ?? '', r.teachers?.employee_number ?? '', r.status])
+        const rows = filteredHistoryData.map(r => [formatDateLong(r.attendance_date), r.teachers?.full_name ?? '', r.teachers?.employee_number ?? '', r.status])
         downloadExcel('teacher-attendance-history', headers, rows)
       }
       return
@@ -139,7 +147,7 @@ export default function TeacherAttendancePage() {
     const headers = ['Date', 'Teacher Name', 'Employee No.', 'Status']
     const rows = teachers.map(t => {
       const rec = records.get(t.id)
-      return [formatDate(date), t.full_name, t.employee_number ?? '', rec?.status ?? '']
+      return [formatDateLong(date), t.full_name, t.employee_number ?? '', rec?.status ?? '']
     })
     downloadExcel(`teacher-attendance-${date}`, headers, rows)
   }
@@ -153,12 +161,16 @@ export default function TeacherAttendancePage() {
   const currentYear = new Date().getFullYear()
   const yearOptions = Array.from({ length: 8 }, (_, i) => currentYear - 3 + i)
 
+  const filteredHistoryData = historyData
+    .filter(r => r.teachers?.staff_type === staffType)
+    .filter(r => !historyTeacherSearch || r.teachers?.full_name?.toLowerCase().includes(historyTeacherSearch.toLowerCase()))
+
   type TSRow = {
     teacher_id: string; full_name: string; employee_number: string | null
     present: number; absent: number; late: number; excused: number; total: number
   }
   const summaryMap = new Map<string, TSRow>()
-  for (const r of historyData) {
+  for (const r of filteredHistoryData) {
     if (!summaryMap.has(r.teacher_id)) {
       summaryMap.set(r.teacher_id, {
         teacher_id: r.teacher_id,
@@ -175,7 +187,26 @@ export default function TeacherAttendancePage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Teacher Attendance" subtitle="Mark and track teacher attendance" />
+      <PageHeader
+        title="Staff Attendance"
+        subtitle={`Mark and track ${staffType === 'teaching' ? 'teaching' : 'non-teaching'} staff attendance`}
+      />
+
+      {/* Staff type toggle */}
+      <div className="flex gap-1 p-1 bg-surface-alt rounded-lg w-fit border border-border no-print">
+        <button
+          className={cn('px-4 py-1.5 rounded-md text-sm font-medium transition-colors', staffType === 'teaching' ? 'bg-accent text-white' : 'text-fg-muted hover:text-fg')}
+          onClick={() => { setStaffType('teaching'); setTeachers([]); setRecords(new Map()) }}
+        >
+          Teaching Staff
+        </button>
+        <button
+          className={cn('px-4 py-1.5 rounded-md text-sm font-medium transition-colors', staffType === 'non_teaching' ? 'bg-accent text-white' : 'text-fg-muted hover:text-fg')}
+          onClick={() => { setStaffType('non_teaching'); setTeachers([]); setRecords(new Map()) }}
+        >
+          Non-Teaching Staff
+        </button>
+      </div>
 
       {/* Mode toggle */}
       <div className="card p-1 flex gap-1 w-fit no-print">
@@ -210,15 +241,20 @@ export default function TeacherAttendancePage() {
                 </div>
               )}
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap items-center">
+              {isAlreadyMarked && (
+                <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2.5 py-1 rounded-full font-medium border border-green-200 dark:border-green-800">
+                  ✓ Already marked for this date
+                </span>
+              )}
               {isAdmin && records.size > 0 && (
                 <>
                   <Button variant="secondary" onClick={markAllPresent} disabled={loading}>Mark All Present</Button>
-                  <Button onClick={save} loading={saving} disabled={records.size === 0}>Save Attendance</Button>
+                  <Button onClick={save} loading={saving} disabled={records.size === 0 || isAlreadyMarked}>
+                    {isAlreadyMarked ? 'Already Saved' : 'Save Attendance'}
+                  </Button>
                 </>
               )}
-              <Button variant="ghost" icon={<Printer size={15} />} onClick={() => window.print()} disabled={loading}>Print</Button>
-              <Button variant="ghost" icon={<Download size={15} />} onClick={handleExportCSV} disabled={loading || teachers.length === 0}>Export</Button>
             </div>
           </div>
 
@@ -334,6 +370,17 @@ export default function TeacherAttendancePage() {
                   {yearOptions.map(y => <option key={y} value={String(y)}>{y}</option>)}
                 </select>
               </div>
+              {(historyTermId || historyYear) && (
+                <div>
+                  <label className="label text-xs mb-1">Search teacher</label>
+                  <input
+                    className="input max-w-[180px]"
+                    placeholder="Name…"
+                    value={historyTeacherSearch}
+                    onChange={e => setHistoryTeacherSearch(e.target.value)}
+                  />
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <Button variant="ghost" icon={<Printer size={15} />} onClick={() => window.print()}>Print</Button>
@@ -411,12 +458,12 @@ export default function TeacherAttendancePage() {
                 <tbody>
                   {historyLoading ? (
                     <TableSkeleton rows={6} cols={4} />
-                  ) : historyData.length === 0 ? (
+                  ) : filteredHistoryData.length === 0 ? (
                     <tr><td colSpan={4}>
                       <EmptyState title="No records found" description="No attendance records match the selected filters" />
                     </td></tr>
                   ) : (
-                    historyData.map(r => (
+                    filteredHistoryData.map(r => (
                       <tr key={r.id}>
                         <td className="text-sm">{formatDate(r.attendance_date)}</td>
                         <td className="font-medium">{r.teachers?.full_name ?? '—'}</td>

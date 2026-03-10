@@ -6,6 +6,15 @@ export function formatDate(date: string | Date): string {
   }).format(new Date(date))
 }
 
+// Use in CSV exports — full month name prevents Excel from auto-parsing as a date serial
+export function formatDateLong(date: string | Date): string {
+  return new Intl.DateTimeFormat('en-GH', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(date))
+}
+
 export function formatDateTime(date: string | Date): string {
   return new Intl.DateTimeFormat('en-GH', {
     day: '2-digit',

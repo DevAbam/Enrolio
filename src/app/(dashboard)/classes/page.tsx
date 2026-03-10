@@ -9,9 +9,7 @@ import { createClient } from '@/lib/supabase/client'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
-import { Table } from '@/components/ui/Table'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { TableSkeleton } from '@/components/ui/Skeleton'
 import type { Class } from '@/types'
 
 type ActionStudent = { id: string; full_name: string; admission_number: string | null }
@@ -230,79 +228,71 @@ export default function ClassesPage() {
         action={<Button icon={<Plus size={16} />} onClick={openAdd}>Add Class</Button>}
       />
 
-      <div className="card overflow-hidden">
-        <Table>
-          <thead>
-            <tr>
-              <th>Level</th>
-              <th>Class Name</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <TableSkeleton rows={5} cols={3} />
-            ) : classes.length === 0 ? (
-              <tr><td colSpan={3}>
-                <EmptyState
-                  title="No classes yet"
-                  description="Add your first class, then set fees for each class in the Terms page."
-                  action={<Button variant="secondary" icon={<Plus size={14} />} onClick={openAdd} size="sm">Add Class</Button>}
-                />
-              </td></tr>
-            ) : (
-              classes.map((cls) => {
-                const isTop = isHighestLevel(cls)
-                return (
-                  <tr key={cls.id}>
-                    <td className="text-fg-muted text-sm w-16">
-                      {cls.level ?? <span className="text-fg-subtle">—</span>}
-                    </td>
-                    <td className="font-medium">
-                      {cls.name}
-                      {isTop && cls.level != null && (
-                        <span className="ml-2 text-xs text-fg-subtle border border-border rounded px-1.5 py-0.5">
-                          Final Level
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => openEdit(cls)}
-                          className="btn-ghost p-2 rounded-lg"
-                          aria-label="Edit class"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        {cls.level != null && (
-                          isTop ? (
-                            <button
-                              onClick={() => openGraduateModal(cls)}
-                              className="btn-ghost p-2 rounded-lg"
-                              title="Graduate students from this final-level class"
-                            >
-                              <GraduationCap size={15} className="text-accent" />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => openPromoteModal(cls)}
-                              className="btn-ghost p-2 rounded-lg"
-                              title="Promote students to the next level"
-                            >
-                              <ChevronsUp size={15} className="text-accent" />
-                            </button>
-                          )
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </Table>
-      </div>
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="card p-4 h-20 animate-pulse bg-surface-alt" />
+          ))}
+        </div>
+      ) : classes.length === 0 ? (
+        <div className="card p-8">
+          <EmptyState
+            title="No classes yet"
+            description="Add your first class, then set fees for each class in the Terms page."
+            action={<Button variant="secondary" icon={<Plus size={14} />} onClick={openAdd} size="sm">Add Class</Button>}
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {classes.map((cls) => {
+            const isTop = isHighestLevel(cls)
+            return (
+              <div key={cls.id} className="card p-4 flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  {cls.level != null && (
+                    <p className="text-xs text-fg-subtle mb-0.5">Level {cls.level}</p>
+                  )}
+                  <h3 className="font-semibold text-fg">{cls.name}</h3>
+                  {isTop && cls.level != null && (
+                    <span className="inline-block mt-1.5 text-xs text-fg-subtle border border-border rounded px-1.5 py-0.5">
+                      Final Level
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => openEdit(cls)}
+                    className="btn-ghost p-1.5 rounded-lg"
+                    aria-label="Edit class"
+                    title="Edit class"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  {cls.level != null && (
+                    isTop ? (
+                      <button
+                        onClick={() => openGraduateModal(cls)}
+                        className="btn-ghost p-1.5 rounded-lg"
+                        title="Graduate students from this final-level class"
+                      >
+                        <GraduationCap size={14} className="text-accent" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => openPromoteModal(cls)}
+                        className="btn-ghost p-1.5 rounded-lg"
+                        title="Promote students to the next level"
+                      >
+                        <ChevronsUp size={14} className="text-accent" />
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* ── Promote modal ── */}
       <Modal
@@ -378,9 +368,6 @@ export default function ClassesPage() {
               Higher number = higher class. The class with the highest level gets a Graduate button instead of Promote.
             </p>
             {errors.level && <p className="field-error">{errors.level.message}</p>}
-          </div>
-          <div className="rounded bg-surface-alt border border-border px-3 py-2 text-xs text-fg-muted">
-            Fees are set per term in <strong>Terms → expand term → Class Fees</strong>, not here.
           </div>
           <div className="flex gap-3 pt-2">
             <Button type="submit" loading={isSubmitting} className="flex-1 justify-center">

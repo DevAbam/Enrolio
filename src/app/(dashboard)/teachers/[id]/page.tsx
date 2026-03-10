@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { ArrowLeft, Pencil, Lock, KeyRound } from 'lucide-react'
+import { ArrowLeft, Pencil, Lock, KeyRound, Check, X as XIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRole } from '@/contexts/RoleContext'
 import { Modal } from '@/components/ui/Modal'
@@ -35,7 +35,8 @@ type TeacherDetail = {
   email: string | null; employee_number: string | null; gender: string | null
   is_active: boolean; user_id: string | null; class_id: string | null
   temp_password: string | null; notes: string | null; created_at: string
-  date_of_birth: string | null; photo_url: string | null
+  date_of_birth: string | null; photo_url: string | null; year_employed: number | null
+  staff_type: string
 }
 
 export default function TeacherDetailPage() {
@@ -50,6 +51,8 @@ export default function TeacherDetailPage() {
   const [loading,    setLoading]    = useState(true)
   const [editModal,  setEditModal]  = useState(false)
   const [pwModal,    setPwModal]    = useState(false)
+  const [editingYear, setEditingYear] = useState(false)
+  const [yearInput,   setYearInput]   = useState('')
 
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<TeacherForm>({
     resolver: zodResolver(teacherSchema),
@@ -136,7 +139,21 @@ export default function TeacherDetailPage() {
     </div>
   )
 
-  const yearEmployed = new Date(teacher.created_at).getFullYear()
+  const yearEmployed = teacher.year_employed ?? new Date(teacher.created_at).getFullYear()
+  const yearIsEstimated = teacher.year_employed == null
+
+  async function saveYearEmployed() {
+    const yr = parseInt(yearInput)
+    if (isNaN(yr) || yr < 1900 || yr > new Date().getFullYear() + 1) {
+      toast.error('Enter a valid 4-digit year')
+      return
+    }
+    const { error } = await supabase.from('teachers').update({ year_employed: yr }).eq('id', id)
+    if (error) { toast.error(error.message); return }
+    setTeacher(prev => prev ? { ...prev, year_employed: yr } : prev)
+    setEditingYear(false)
+    toast.success('Year employed updated')
+  }
 
   return (
     <div className="space-y-6">
@@ -147,12 +164,12 @@ export default function TeacherDetailPage() {
         </button>
         <div className="flex-1 min-w-0">
           <h2 className="text-xl font-semibold text-fg truncate">{teacher.full_name}</h2>
-          <p className="text-sm text-fg-muted">Teacher Profile</p>
+          <p className="text-sm text-fg-muted">{teacher.staff_type === 'non_teaching' ? 'Non-Teaching Staff Profile' : 'Teaching Staff Profile'}</p>
         </div>
         {isAdmin && (
           <div className="flex items-center gap-2">
             <Button variant="secondary" icon={<Pencil size={14} />} onClick={openEdit}>Edit</Button>
-            {teacher.user_id && (
+            {teacher.staff_type !== 'non_teaching' && teacher.user_id && (
               <Button variant="secondary" icon={<Lock size={14} />} onClick={() => { pwForm.reset(); setPwModal(true) }}>
                 Change Password
               </Button>
@@ -186,6 +203,9 @@ export default function TeacherDetailPage() {
             <div className="mt-2 flex justify-center gap-2 flex-wrap">
               <Badge variant={teacher.is_active ? 'green' : 'gray'}>
                 {teacher.is_active ? 'Active' : 'Inactive'}
+              </Badge>
+              <Badge variant="gray">
+                {teacher.staff_type === 'non_teaching' ? 'Non-Teaching' : 'Teaching'}
               </Badge>
             </div>
             {isAdmin && (
@@ -231,24 +251,59 @@ export default function TeacherDetailPage() {
               <dt className="text-gray-500">Employee Number</dt>
               <dd className="font-medium text-fg">{teacher.employee_number ?? '—'}</dd>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
               <dt className="text-gray-500">Year Employed</dt>
-              <dd className="font-medium text-fg">{yearEmployed}</dd>
+              <dd className="font-medium text-fg flex items-center gap-2">
+                {editingYear ? (
+                  <>
+                    <input
+                      type="number"
+                      className="input w-24 py-0.5 text-sm"
+                      value={yearInput}
+                      onChange={e => setYearInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveYearEmployed(); if (e.key === 'Escape') setEditingYear(false) }}
+                      autoFocus
+                      min={1900}
+                      max={new Date().getFullYear() + 1}
+                    />
+                    <button onClick={saveYearEmployed} className="btn-ghost p-1 text-accent"><Check size={14} /></button>
+                    <button onClick={() => setEditingYear(false)} className="btn-ghost p-1 text-fg-muted"><XIcon size={14} /></button>
+                  </>
+                ) : (
+                  <>
+                    <span>{yearEmployed}</span>
+                    {yearIsEstimated && <span className="text-xs text-fg-muted">(estimated)</span>}
+                    {isAdmin && (
+                      <button
+                        onClick={() => { setYearInput(String(yearEmployed)); setEditingYear(true) }}
+                        className="btn-ghost p-1 text-fg-muted hover:text-accent"
+                        title="Edit year employed"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    )}
+                  </>
+                )}
+              </dd>
             </div>
-            <div className="flex justify-between">
-              <dt className="text-gray-500">Assigned Class</dt>
-              <dd className="font-medium text-fg">{className ?? '—'}</dd>
-            </div>
+            {teacher.staff_type !== 'non_teaching' && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">Assigned Class</dt>
+                <dd className="font-medium text-fg">{className ?? '—'}</dd>
+              </div>
+            )}
           </dl>
         </div>
       </div>
 
       {/* Bottom row: Login Account | Notes */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Login Account */}
+        {/* Login Account — teaching staff only */}
         <div className="card p-5">
           <h3 className="font-semibold text-fg border-b border-border pb-2 mb-4">Login Account</h3>
-          {teacher.user_id ? (
+          {teacher.staff_type === 'non_teaching' ? (
+            <p className="text-sm text-fg-muted">Login accounts are available for teaching staff only.</p>
+          ) : teacher.user_id ? (
             <dl className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <dt className="text-gray-500">Login Email</dt>
@@ -265,7 +320,7 @@ export default function TeacherDetailPage() {
               )}
             </dl>
           ) : (
-            <p className="text-sm text-fg-muted">No login account yet. Go to Teachers list to create one.</p>
+            <p className="text-sm text-fg-muted">No login account yet. Go to Staff list to create one.</p>
           )}
         </div>
 

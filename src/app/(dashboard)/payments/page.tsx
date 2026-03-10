@@ -35,6 +35,7 @@ export default function PaymentsPage() {
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState(today())
+  const [dateExact, setDateExact] = useState('')
   const [termFilter, setTermFilter] = useState(selectedTerm?.id ?? '')
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
@@ -44,6 +45,8 @@ export default function PaymentsPage() {
   const [studentResults, setStudentResults] = useState<StudentOption[]>([])
   const [selectedStudent, setSelectedStudent] = useState<StudentOption | null>(null)
   const [studentSearching, setStudentSearching] = useState(false)
+  const [recordedCount, setRecordedCount] = useState(0)
+  const [lastRecorded, setLastRecorded] = useState<string | null>(null)
   const supabase = createClient()
 
   const load = useCallback(async () => {
@@ -55,8 +58,12 @@ export default function PaymentsPage() {
       .order('created_at', { ascending: false })
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1)
 
-    if (dateFrom) query = query.gte('payment_date', dateFrom)
-    if (dateTo) query = query.lte('payment_date', dateTo)
+    if (dateExact) {
+      query = query.eq('payment_date', dateExact)
+    } else {
+      if (dateFrom) query = query.gte('payment_date', dateFrom)
+      if (dateTo) query = query.lte('payment_date', dateTo)
+    }
     if (termFilter) query = query.eq('term_id', termFilter)
 
     const { data, count, error } = await query
@@ -73,7 +80,7 @@ export default function PaymentsPage() {
       setTotal(count ?? 0)
     }
     setLoading(false)
-  }, [supabase, page, dateFrom, dateTo, search, termFilter])
+  }, [supabase, page, dateFrom, dateTo, dateExact, search, termFilter])
 
   useEffect(() => { load() }, [load])
 
@@ -84,7 +91,10 @@ export default function PaymentsPage() {
   }, [selectedTerm?.id])
 
   useEffect(() => {
-    if (!payModal) { setStudentSearch(''); setStudentResults([]); setSelectedStudent(null) }
+    if (!payModal) {
+      setStudentSearch(''); setStudentResults([]); setSelectedStudent(null)
+      setRecordedCount(0); setLastRecorded(null)
+    }
   }, [payModal])
 
   useEffect(() => {
@@ -120,62 +130,87 @@ export default function PaymentsPage() {
       (p.receipt_number ?? '').toLowerCase().includes(search.toLowerCase())
     )
 
-    const termLabel = allTerms.find(t => t.id === termFilter)?.label ?? ''
     const fmtCur = (n: number) => `GHS ${n.toFixed(2)}`
     const fmtDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-    const total = results.reduce((s, p) => s + Number(p.amount_paid), 0)
+    const grandTotal = results.reduce((s, p) => s + Number(p.amount_paid), 0)
+
+    const logoHtml = schoolLogoUrl
+      ? `<img src="${schoolLogoUrl}" alt="${schoolName ?? ''}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:1px solid #e2e8f0;" />`
+      : `<div style="width:48px;height:48px;border-radius:50%;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;margin:0 auto;">${(schoolName ?? 'S').charAt(0).toUpperCase()}</div>`
+
+    const schoolMeta = [schoolAddress, [schoolPhone, schoolEmail].filter(Boolean).join(' · ')].filter(Boolean)
+      .map(line => `<p style="margin:0;line-height:1.4;">${line}</p>`).join('')
 
     const cards = results.map(p => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const cls = (p.students?.classes as any)?.name ?? ''
+      const pTermLabel = allTerms.find(t => t.id === p.term_id)?.label ?? ''
+      const balAfter = p.balance_after != null ? Number(p.balance_after) : null
+      const balHtml = balAfter != null
+        ? `<div class="row"><span class="lbl">Balance Remaining</span><span style="font-weight:700;color:${balAfter > 0 ? '#dc2626' : '#16a34a'}">${balAfter > 0 ? fmtCur(balAfter) : 'Fully Paid'}</span></div>`
+        : ''
       return `<div class="receipt">
-        <div class="receipt-header"><b>${schoolName ?? 'School'}</b><br/><span>Official Receipt</span></div>
-        <dl>
-          ${p.receipt_number ? `<div><dt>Receipt No.</dt><dd>${p.receipt_number}</dd></div>` : ''}
-          <div><dt>Date</dt><dd>${fmtDate(p.payment_date)}</dd></div>
-          <div><dt>Student</dt><dd>${p.students?.full_name ?? '—'}</dd></div>
-          ${cls ? `<div><dt>Class</dt><dd>${cls}</dd></div>` : ''}
-          ${termLabel ? `<div><dt>Term</dt><dd>${termLabel}</dd></div>` : ''}
-          <div><dt>Method</dt><dd style="text-transform:capitalize">${(p.payment_method ?? '—').replace('_', ' ')}</dd></div>
-          ${p.notes ? `<div class="notes-row"><dt>Notes</dt><dd>${p.notes}</dd></div>` : ''}
-        </dl>
-        <div class="amount"><span>Amount Paid</span><b>${fmtCur(Number(p.amount_paid))}</b></div>
+        <div class="r-header">
+          <div style="text-align:center;margin-bottom:8px;">${logoHtml}</div>
+          <p style="margin:2px 0;font-size:13px;font-weight:700;">${schoolName ?? 'School'}</p>
+          ${schoolMeta ? `<div style="font-size:9px;color:#64748b;margin-top:2px;line-height:1.4;">${schoolMeta}</div>` : ''}
+          <p style="margin:4px 0 0;font-size:8px;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;">Official Receipt</p>
+        </div>
+        <div class="sep-dashed"></div>
+        <div class="row"><span class="lbl">Receipt No.</span><span class="val">${p.receipt_number ?? '—'}</span></div>
+        <div class="row"><span class="lbl">Date</span><span class="val">${fmtDate(p.payment_date)}</span></div>
+        <div class="sep-solid"></div>
+        <div class="row"><span class="lbl">Student</span><span class="val">${p.students?.full_name ?? '—'}</span></div>
+        ${cls ? `<div class="row"><span class="lbl">Class</span><span class="val">${cls}</span></div>` : ''}
+        ${pTermLabel ? `<div class="row"><span class="lbl">Term</span><span class="val">${pTermLabel}</span></div>` : ''}
+        <div class="sep-solid"></div>
+        <div class="row amount-row"><span style="font-size:12px;color:#64748b;">Amount Paid</span><span style="font-size:18px;font-weight:700;color:#2563eb;">${fmtCur(Number(p.amount_paid))}</span></div>
+        ${balHtml}
+        ${p.payment_method ? `<div class="row"><span class="lbl">Method</span><span class="val" style="text-transform:capitalize;">${p.payment_method.replace('_', ' ')}</span></div>` : ''}
+        ${p.notes ? `<div style="margin-top:4px;"><p class="lbl" style="margin-bottom:2px;">Notes</p><p style="margin:0;color:#0f172a;word-break:break-word;">${p.notes}</p></div>` : ''}
+        <div class="sep-dashed"></div>
+        <p style="text-align:center;font-size:9px;color:#94a3b8;margin:0;">Thank you for your payment</p>
       </div>`
     }).join('')
 
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<style>
-  @page{size:auto;margin:8mm}
-  body{font-family:sans-serif;font-size:11px;color:#111;background:#fff}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:720px;margin:0 auto}
-  .receipt{border:1px solid #ccc;border-radius:6px;padding:10px;page-break-inside:avoid;break-inside:avoid}
-  .receipt-header{text-align:center;border-bottom:1px solid #ddd;padding-bottom:6px;margin-bottom:6px}
-  .receipt-header b{font-size:13px}
-  .receipt-header span{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:#888}
-  dl div{display:flex;justify-content:space-between;margin:3px 0}
-  dl dt{color:#888}
-  dl dd{font-weight:500;text-align:right;max-width:55%;word-break:break-word}
-  .notes-row{flex-direction:column !important}
-  .notes-row dt{color:#888;margin-bottom:2px}
-  .notes-row dd{text-align:left !important;max-width:100% !important;word-break:break-word}
-  .amount{display:flex;justify-content:space-between;border-top:1px solid #ccc;margin-top:6px;padding-top:6px}
-  .amount b{font-size:14px}
-  .summary{text-align:center;font-size:11px;color:#555;margin-top:10px}
-</style></head>
-<body>
-<div class="grid">${cards}</div>
+    const printContent = `<div style="font-family:sans-serif;font-size:11px;color:#0f172a;">
+<div style="display:flex;flex-direction:column;align-items:center;gap:12px;max-width:320px;margin:0 auto;">${cards}</div>
 ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">No payments found.</p>' : ''}
-<div class="summary">${results.length} receipt${results.length !== 1 ? 's' : ''} — Total: ${fmtCur(total)}</div>
-</body></html>`
+<div style="text-align:center;font-size:11px;color:#555;margin-top:12px;">${results.length} receipt${results.length !== 1 ? 's' : ''} — Total: ${fmtCur(grandTotal)}</div>
+</div>`
 
-    const w = window.open('', '_blank', 'width=900,height=600')
-    if (!w) { toast.error('Popup blocked — allow popups and try again'); return }
-    w.document.write(html)
-    w.document.close()
-    w.onload = () => {
-      w.print()
-      w.onafterprint = () => w.close()
-    }
+    const style = document.createElement('style')
+    style.id = '__print-all-style__'
+    style.textContent = `
+      @media print {
+        body > *:not(#__print-all-receipts__) { display: none !important; }
+        #__print-all-receipts__ { display: block !important; }
+        @page { size: 80mm auto; margin: 6mm; }
+      }
+      #__print-all-receipts__ .receipt { border:1px solid #e2e8f0;border-radius:8px;padding:16px;page-break-inside:avoid;break-inside:avoid;width:100%;box-sizing:border-box; }
+      #__print-all-receipts__ .r-header { text-align:center;margin-bottom:0; }
+      #__print-all-receipts__ .sep-dashed { border-top:2px dashed #e2e8f0;margin:12px 0; }
+      #__print-all-receipts__ .sep-solid { border-top:1px solid #e2e8f0;margin:8px 0; }
+      #__print-all-receipts__ .row { display:flex;justify-content:space-between;align-items:center;margin:4px 0;font-size:11px; }
+      #__print-all-receipts__ .lbl { color:#64748b; }
+      #__print-all-receipts__ .val { font-weight:600;text-align:right;max-width:55%;word-break:break-word; }
+      #__print-all-receipts__ .amount-row { margin-bottom:4px; }
+    `
+    document.head.appendChild(style)
+
+    const div = document.createElement('div')
+    div.id = '__print-all-receipts__'
+    div.style.display = 'none'
+    div.innerHTML = printContent
+    document.body.appendChild(div)
+
+    window.print()
+
+    window.addEventListener('afterprint', function cleanup() {
+      document.getElementById('__print-all-receipts__')?.remove()
+      document.getElementById('__print-all-style__')?.remove()
+      window.removeEventListener('afterprint', cleanup)
+    }, { once: true })
   }
 
   function openReceipt(p: PaymentWithStudent) {
@@ -222,8 +257,8 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
               </select>
             </div>
           )}
-          {(dateFrom || termFilter) && (
-            <button onClick={() => { setDateFrom(''); setTermFilter(''); setPage(1) }} className="btn-ghost flex items-center gap-1 text-sm px-3 py-2">
+          {(dateFrom || termFilter || dateExact) && (
+            <button onClick={() => { setDateFrom(''); setTermFilter(''); setDateExact(''); setPage(1) }} className="btn-ghost flex items-center gap-1 text-sm px-3 py-2">
               <X size={14} /> Clear
             </button>
           )}
@@ -231,6 +266,17 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
       </div>
 
       <div className="card overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <h3 className="font-semibold text-sm text-fg">Payment History</h3>
+          <input
+            type="date"
+            className="input text-sm max-w-[160px] py-1"
+            value={dateExact}
+            max={today()}
+            title="Filter by specific date"
+            onChange={(e) => { setDateExact(e.target.value); setPage(1) }}
+          />
+        </div>
         <Table>
           <thead>
             <tr>
@@ -300,53 +346,73 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
 
       {/* Record Payment Modal */}
       <Modal open={payModal} onClose={() => setPayModal(false)} title="Record Payment">
-        {!selectedStudent ? (
-          <div className="space-y-3 min-h-96">
-            <div className="relative">
-              <label className="label">Search Student *</label>
-              <SearchInput
-                placeholder="Type name or admission number…"
-                value={studentSearch}
-                onChange={e => setStudentSearch(e.target.value)}
-                autoFocus
-              />
-              {(studentResults.length > 0 || studentSearching) && (
-                <div className="absolute z-10 left-0 right-0 mt-1 bg-surface border border-border rounded-lg shadow-lg overflow-hidden max-h-56 overflow-y-auto">
-                  {studentSearching && <p className="px-4 py-3 text-sm text-fg-muted">Searching…</p>}
-                  {studentResults.map(s => (
-                    <button
-                      key={s.id}
-                      className="w-full text-left px-4 py-2.5 hover:bg-surface-alt border-b border-border last:border-b-0"
-                      onClick={() => { setSelectedStudent(s); setStudentSearch(''); setStudentResults([]) }}
-                    >
-                      <span className="font-medium text-sm text-fg">{s.full_name}</span>
-                      {s.class_name && <span className="text-xs text-fg-muted ml-2">· {s.class_name}</span>}
-                    </button>
-                  ))}
-                  {!studentSearching && studentSearch && studentResults.length === 0 && (
-                    <p className="px-4 py-3 text-sm text-fg-muted">No students found</p>
-                  )}
-                </div>
-              )}
+        <div className="space-y-4">
+          {/* Success banner after each payment */}
+          {lastRecorded && (
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-2 text-sm text-green-800 dark:text-green-300 flex items-center gap-2">
+              <span className="text-base">✓</span>
+              <span>Payment recorded for <strong>{lastRecorded}</strong>. Add another or close when done.</span>
             </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-surface-alt rounded-lg border border-border">
-              <div>
-                <p className="font-medium text-sm text-fg">{selectedStudent.full_name}</p>
-                {selectedStudent.class_name && <p className="text-xs text-fg-muted">{selectedStudent.class_name}</p>}
+          )}
+          {recordedCount > 0 && (
+            <p className="text-xs text-fg-muted">{recordedCount} payment{recordedCount !== 1 ? 's' : ''} recorded this session</p>
+          )}
+          {!selectedStudent ? (
+            <div className="space-y-3 min-h-72">
+              <div className="relative">
+                <label className="label">Search Student *</label>
+                <SearchInput
+                  placeholder="Type name or admission number…"
+                  value={studentSearch}
+                  onChange={e => setStudentSearch(e.target.value)}
+                  autoFocus={!lastRecorded}
+                />
+                {(studentResults.length > 0 || studentSearching) && (
+                  <div className="absolute z-10 left-0 right-0 mt-1 bg-surface border border-border rounded-lg shadow-lg overflow-hidden max-h-56 overflow-y-auto">
+                    {studentSearching && <p className="px-4 py-3 text-sm text-fg-muted">Searching…</p>}
+                    {studentResults.map(s => (
+                      <button
+                        key={s.id}
+                        className="w-full text-left px-4 py-2.5 hover:bg-surface-alt border-b border-border last:border-b-0"
+                        onClick={() => { setSelectedStudent(s); setStudentSearch(''); setStudentResults([]) }}
+                      >
+                        <span className="font-medium text-sm text-fg">{s.full_name}</span>
+                        {s.class_name && <span className="text-xs text-fg-muted ml-2">· {s.class_name}</span>}
+                      </button>
+                    ))}
+                    {!studentSearching && studentSearch && studentResults.length === 0 && (
+                      <p className="px-4 py-3 text-sm text-fg-muted">No students found</p>
+                    )}
+                  </div>
+                )}
               </div>
-              <button className="text-fg-muted hover:text-fg text-xs" onClick={() => setSelectedStudent(null)}>✕ Change</button>
+              <div className="flex justify-end pt-2">
+                <button className="btn-ghost text-sm" onClick={() => setPayModal(false)}>Close</button>
+              </div>
             </div>
-            <PaymentForm
-              studentId={selectedStudent.id}
-              outstanding={0}
-              onSuccess={() => { setPayModal(false); setSelectedStudent(null); load() }}
-              onCancel={() => { setPayModal(false); setSelectedStudent(null) }}
-            />
-          </div>
-        )}
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-3 bg-surface-alt rounded-lg border border-border">
+                <div>
+                  <p className="font-medium text-sm text-fg">{selectedStudent.full_name}</p>
+                  {selectedStudent.class_name && <p className="text-xs text-fg-muted">{selectedStudent.class_name}</p>}
+                </div>
+                <button className="text-fg-muted hover:text-fg text-xs" onClick={() => setSelectedStudent(null)}>✕ Change</button>
+              </div>
+              <PaymentForm
+                studentId={selectedStudent.id}
+                outstanding={0}
+                onSuccess={() => {
+                  setLastRecorded(selectedStudent.full_name)
+                  setRecordedCount(c => c + 1)
+                  setSelectedStudent(null)
+                  load()
+                }}
+                onCancel={() => { setPayModal(false); setSelectedStudent(null) }}
+              />
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   )

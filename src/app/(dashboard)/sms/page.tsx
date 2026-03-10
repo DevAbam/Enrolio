@@ -60,8 +60,10 @@ function SMSPageInner() {
   const [clearingLogs,    setClearingLogs]    = useState(false)
   const [logPage,       setLogPage]       = useState(1)
   const [logTotal,      setLogTotal]      = useState(0)
+  const [selectedStudentPage, setSelectedStudentPage] = useState(1)
   const supabase = createClient()
   const LOG_PAGE_SIZE = 10
+  const STUDENT_PAGE_SIZE = 10
 
   const loadCredits = useCallback(async () => {
     const res = await fetch('/api/sms/credits')
@@ -163,6 +165,10 @@ function SMSPageInner() {
   const filteredStudents = allStudents.filter((s) =>
     s.full_name.toLowerCase().includes(search.toLowerCase()) ||
     (s.admission_number ?? '').toLowerCase().includes(search.toLowerCase())
+  )
+  const pagedSelectedStudents = filteredStudents.slice(
+    (selectedStudentPage - 1) * STUDENT_PAGE_SIZE,
+    selectedStudentPage * STUDENT_PAGE_SIZE
   )
 
   function toggleSelectAll() {
@@ -437,7 +443,7 @@ function SMSPageInner() {
           <SearchInput
             placeholder="Search students…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setSelectedStudentPage(1) }}
             className="max-w-xs"
           />
           {selectedIds.size > 0 && (
@@ -457,7 +463,7 @@ function SMSPageInner() {
                 </tr>
               </thead>
               <tbody>
-                {filteredStudents.map((s) => (
+                {pagedSelectedStudents.map((s) => (
                   <tr key={s.id}>
                     <td><input type="checkbox" checked={selectedIds.has(s.id)} onChange={() => toggleSelect(s.id)} /></td>
                     <td className="font-medium">{s.full_name}</td>
@@ -468,6 +474,7 @@ function SMSPageInner() {
                 ))}
               </tbody>
             </Table>
+            <Pagination page={selectedStudentPage} pageSize={STUDENT_PAGE_SIZE} total={filteredStudents.length} onPageChange={setSelectedStudentPage} />
           </div>
 
           <div className="max-w-lg space-y-2">

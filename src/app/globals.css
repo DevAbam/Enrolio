@@ -10,10 +10,10 @@
 
 :root {
   /* Accent / brand colour ─ swap just this group to retheme the whole app */
-  /* --accent:      #16a34a;
+  /* --accent: #16a34a;
   --accent-dark: #15803d;
-  --accent-bg:   #f0fdf4;
-  --accent-fg:   #15803d; */
+  --accent-bg: #f0fdf4;
+  --accent-fg: #15803d; */
   /* blue version */
   --accent: #2563eb;
   --accent-dark: #1d4ed8;
@@ -42,8 +42,8 @@
   /* blue version */
   --accent: #2563eb;
   --accent-dark: #1d4ed8;
-  --accent-bg: #eff6ff;
-  --accent-fg: #1d4ed8;
+  --accent-bg: rgba(37, 99, 235, 0.15);
+  --accent-fg: #93c5fd;
 
 
   /* Surfaces (dark: true blacks + charcoal) */
@@ -269,26 +269,31 @@
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+
   .attendance-status-btn.is-selected-present {
     background-color: #16a34a !important;
     color: white !important;
     border-color: #16a34a !important;
   }
+
   .attendance-status-btn.is-selected-absent {
     background-color: #dc2626 !important;
     color: white !important;
     border-color: #dc2626 !important;
   }
+
   .attendance-status-btn.is-selected-late {
     background-color: #eab308 !important;
     color: white !important;
     border-color: #eab308 !important;
   }
+
   .attendance-status-btn.is-selected-excused {
     background-color: #6b7280 !important;
     color: white !important;
     border-color: #6b7280 !important;
   }
+
   .attendance-status-btn:not(.is-selected-present):not(.is-selected-absent):not(.is-selected-late):not(.is-selected-excused) {
     background-color: white !important;
     color: #9ca3af !important;

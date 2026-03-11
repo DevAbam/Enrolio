@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { MessageSquare, Send, AlertTriangle, Zap, Plus } from 'lucide-react'
+import { MessageSquare, Send, AlertTriangle, Zap, Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -58,6 +58,7 @@ function SMSPageInner() {
   const [rechargeLoading, setRechargeLoading] = useState(false)
   const [clearLogsOpen,   setClearLogsOpen]   = useState(false)
   const [clearingLogs,    setClearingLogs]    = useState(false)
+  const [refreshingLogId, setRefreshingLogId] = useState<string | null>(null)
   const [logPage,       setLogPage]       = useState(1)
   const [logTotal,      setLogTotal]      = useState(0)
   const [selectedStudentPage, setSelectedStudentPage] = useState(1)
@@ -191,6 +192,26 @@ function SMSPageInner() {
     else { setSmsLogs([]); setLogTotal(0); toast.success('SMS logs cleared') }
     setClearingLogs(false)
     setClearLogsOpen(false)
+  }
+
+  async function refreshStatus(logId: string) {
+    setRefreshingLogId(logId)
+    try {
+      const res = await fetch('/api/sms/refresh-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ logId }),
+      })
+      const data = await res.json()
+      if (res.ok && data.status) {
+        setSmsLogs(prev => prev.map(l => l.id === logId ? { ...l, status: data.status } : l))
+      } else {
+        toast.error('Could not refresh status')
+      }
+    } catch {
+      toast.error('Could not refresh status')
+    }
+    setRefreshingLogId(null)
   }
 
   async function callSmsApi(
@@ -602,21 +623,49 @@ function SMSPageInner() {
                 <th>Type</th>
                 <th>Status</th>
                 <th>Preview</th>
+                <th className="w-8"></th>
               </tr>
             </thead>
             <tbody>
-              {smsLogs.map((log) => (
-                <tr key={log.id}>
-                  <td className="text-xs text-fg-subtle">{formatDateTime(log.sent_at)}</td>
-                  <td className="text-sm">
-                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                    {(log as any).recipient_count > 1 ? `${(log as any).recipient_count} recipients` : log.parent_phone}
-                  </td>
-                  <td><Badge variant="gray">{log.sms_type}</Badge></td>
-                  <td><Badge variant={log.status === 'success' ? 'green' : log.status === 'failed' ? 'red' : 'yellow'}>{log.status}</Badge></td>
-                  <td className="text-xs text-fg-muted max-w-xs truncate">{log.message}</td>
-                </tr>
-              ))}
+              {smsLogs.map((log) => {
+                const statusVariant =
+                  log.status === 'delivered' || log.status === 'success' ? 'green' :
+                  log.status === 'failed' ? 'red' :
+                  log.status === 'partial' ? 'yellow' :
+                  log.status === 'sent' ? 'yellow' : 'gray'
+                const statusLabel =
+                  log.status === 'sent' ? 'Sent' :
+                  log.status === 'delivered' ? 'Delivered' :
+                  log.status === 'failed' ? 'Failed' :
+                  log.status === 'partial' ? 'Partial' :
+                  log.status === 'pending' ? 'Pending' :
+                  log.status === 'success' ? 'Sent' : log.status
+                const canRefresh = !!log.arkesel_msg_ids && log.status !== 'delivered' && log.status !== 'failed'
+                return (
+                  <tr key={log.id}>
+                    <td className="text-xs text-fg-subtle">{formatDateTime(log.sent_at)}</td>
+                    <td className="text-sm">
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {(log as any).recipient_count > 1 ? `${(log as any).recipient_count} recipients` : log.parent_phone}
+                    </td>
+                    <td><Badge variant="gray">{log.sms_type}</Badge></td>
+                    <td><Badge variant={statusVariant}>{statusLabel}</Badge></td>
+                    <td className="text-xs text-fg-muted max-w-xs truncate">{log.message}</td>
+                    <td>
+                      {canRefresh && (
+                        <button
+                          onClick={() => refreshStatus(log.id)}
+                          disabled={refreshingLogId === log.id}
+                          title="Refresh delivery status"
+                          className="btn-ghost p-1.5 rounded text-fg-muted hover:text-accent"
+                        >
+                          <RefreshCw size={13} className={refreshingLogId === log.id ? 'animate-spin' : ''} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </Table>
         )}

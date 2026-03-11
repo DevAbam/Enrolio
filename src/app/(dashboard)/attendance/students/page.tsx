@@ -61,6 +61,7 @@ export default function StudentAttendancePage() {
   const [historyTermId, setHistoryTermId] = useState('')
   const [historyYear, setHistoryYear] = useState('')
   const [historyClassId, setHistoryClassId] = useState('')
+  const [historyDate, setHistoryDate] = useState('')
   const [historyData, setHistoryData] = useState<HistoryRecord[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyStudentSearch, setHistoryStudentSearch] = useState('')
@@ -186,7 +187,7 @@ export default function StudentAttendancePage() {
       .upsert(rows, { onConflict: 'student_id,attendance_date' })
 
     if (error) toast.error('Failed to save: ' + error.message)
-    else toast.success(`Attendance saved for ${rows.length} students`)
+    else { toast.success(`Attendance saved for ${rows.length} students`); setIsAlreadyMarked(true) }
     setSaving(false)
   }
 
@@ -237,7 +238,9 @@ export default function StudentAttendancePage() {
   const currentYear = new Date().getFullYear()
   const yearOptions = Array.from({ length: 8 }, (_, i) => currentYear - 3 + i)
 
-  const filteredHistory = historyData.filter(r => {
+  // Base filter (applied to both Records and Summary tabs)
+  const baseFilteredHistory = historyData.filter(r => {
+    if (!isAdmin && teacherClassId && r.students?.class_id !== teacherClassId) return false
     if (historyStudentSearch) {
       const name = r.students?.full_name?.toLowerCase() ?? ''
       if (!name.includes(historyStudentSearch.toLowerCase())) return false
@@ -245,12 +248,16 @@ export default function StudentAttendancePage() {
     if (historyFilterClassId && r.students?.class_id !== historyFilterClassId) return false
     return true
   })
+  // Records tab also filters by specific date; Summary tab uses unfiltered totals
+  const filteredHistory = historyDate
+    ? baseFilteredHistory.filter(r => r.attendance_date === historyDate)
+    : baseFilteredHistory
 
   const historyCounts = {
-    present: filteredHistory.filter(r => r.status === 'present').length,
-    absent:  filteredHistory.filter(r => r.status === 'absent').length,
-    late:    filteredHistory.filter(r => r.status === 'late').length,
-    excused: filteredHistory.filter(r => r.status === 'excused').length,
+    present: baseFilteredHistory.filter(r => r.status === 'present').length,
+    absent:  baseFilteredHistory.filter(r => r.status === 'absent').length,
+    late:    baseFilteredHistory.filter(r => r.status === 'late').length,
+    excused: baseFilteredHistory.filter(r => r.status === 'excused').length,
   }
 
   type StudentSummaryRow = {
@@ -258,7 +265,7 @@ export default function StudentAttendancePage() {
     present: number; absent: number; late: number; excused: number; total: number
   }
   const studentSummaryMap = new Map<string, StudentSummaryRow>()
-  for (const r of filteredHistory) {
+  for (const r of baseFilteredHistory) {
     if (!studentSummaryMap.has(r.student_id)) {
       studentSummaryMap.set(r.student_id, {
         student_id: r.student_id,
@@ -547,6 +554,16 @@ export default function StudentAttendancePage() {
                     onChange={e => setHistoryStudentSearch(e.target.value)}
                   />
                 </div>
+              </div>
+              {/* Date filter */}
+              <div>
+                <label className="label text-xs mb-1">Filter by date</label>
+                <input
+                  type="date"
+                  className="input max-w-[160px]"
+                  value={historyDate}
+                  onChange={e => setHistoryDate(e.target.value)}
+                />
               </div>
             </div>
             <div className="flex gap-2">

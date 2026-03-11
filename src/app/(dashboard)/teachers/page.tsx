@@ -33,6 +33,7 @@ const teacherSchema = z.object({
   date_of_birth: z.string().optional(),
   class_id: z.string().optional(),
   staff_type: z.enum(['teaching', 'non_teaching']),
+  staff_role: z.string().optional(),
 })
 type TeacherForm = z.infer<typeof teacherSchema>
 
@@ -118,7 +119,7 @@ export default function TeachersPage() {
 
   function openAdd() {
     setEditing(null)
-    reset({ full_name: '', phone: '', email: '', employee_number: '', gender: '', date_of_birth: '', class_id: '', staff_type: staffType })
+    reset({ full_name: '', phone: '', email: '', employee_number: '', gender: '', date_of_birth: '', class_id: '', staff_type: staffType, staff_role: '' })
     setModal(true)
   }
 
@@ -129,6 +130,7 @@ export default function TeachersPage() {
       employee_number: t.employee_number ?? '', gender: (t.gender as 'male' | 'female' | 'other' | '') ?? '',
       date_of_birth: (t as Teacher & { date_of_birth?: string }).date_of_birth ?? '',
       class_id: t.class_id ?? '', staff_type: (t.staff_type as StaffType) ?? 'teaching',
+      staff_role: (t as Teacher & { staff_role?: string }).staff_role ?? '',
     })
     setModal(true)
   }
@@ -154,10 +156,21 @@ export default function TeachersPage() {
       date_of_birth: values.date_of_birth || null,
       class_id: isTeaching ? (values.class_id || null) : null,
       staff_type: values.staff_type,
+      staff_role: !isTeaching ? (values.staff_role || null) : null,
     }
     if (editing) {
       const { error } = await supabase.from('teachers').update(payload).eq('id', editing.id)
       if (error) { toast.error(error.message); return }
+      // Sync auth email if changed and teacher has a login
+      const editingUser = editing as TeacherWithUser
+      if (editingUser.user_id && values.email && values.email !== editing.email) {
+        const res = await fetch('/api/teacher-account/update-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: editingUser.user_id, email: values.email }),
+        })
+        if (!res.ok) toast.warning('Profile saved but login email could not be updated in auth')
+      }
       toast.success(`${isTeaching ? 'Teaching' : 'Non-teaching'} staff updated`)
     } else {
       const { data: { user } } = await supabase.auth.getUser()
@@ -411,6 +424,13 @@ export default function TeachersPage() {
                 <option value="">— No class —</option>
                 {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
+            </div>
+          )}
+          {!isTeachingForm && (
+            <div>
+              <label className="label">Role / Position</label>
+              <input className="input" placeholder="e.g. Driver, Cook, Cleaner, Security" {...register('staff_role')} />
+              <p className="text-xs text-fg-muted mt-1">The specific role this staff member performs</p>
             </div>
           )}
           <div className="flex gap-3 pt-2">

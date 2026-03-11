@@ -262,7 +262,12 @@ function TeacherDashboard() {
               <tr>
                 <th>Name</th>
                 <th>Admission No.</th>
+                <th>Gender</th>
                 <th>Parent Phone</th>
+                <th className="text-right">Term Fee</th>
+                <th className="text-right">Paid</th>
+                <th className="text-right">Outstanding</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
@@ -274,7 +279,21 @@ function TeacherDashboard() {
                     </Link>
                   </td>
                   <td className="text-gray-500 text-xs">{s.admission_number ?? '—'}</td>
+                  <td className="text-gray-500 text-xs capitalize">{s.gender ?? '—'}</td>
                   <td className="text-gray-500">{s.parent_phone ?? '—'}</td>
+                  <td className="text-right text-sm">{formatCurrency(Number(s.term_fee_amount ?? 0))}</td>
+                  <td className="text-right text-sm text-accent-fg font-medium">{formatCurrency(Number(s.total_paid ?? 0))}</td>
+                  <td className="text-right text-sm">
+                    {Number(s.outstanding ?? 0) > 0
+                      ? <span className="font-semibold text-red-600 dark:text-red-400">{formatCurrency(Number(s.outstanding))}</span>
+                      : <span className="text-accent font-medium">Paid</span>
+                    }
+                  </td>
+                  <td>
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${Number(s.outstanding ?? 0) > 0 ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400' : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'}`}>
+                      {Number(s.outstanding ?? 0) > 0 ? 'Owing' : 'Settled'}
+                    </span>
+                  </td>
                 </tr>
               ))}
             </tbody>

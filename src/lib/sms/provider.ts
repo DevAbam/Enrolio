@@ -1,12 +1,16 @@
 export interface SmsResult {
   success: boolean
   providerResponse: string
+  messageId?: string   // Arkesel message ID for delivery status polling
 }
 
 export interface ArkeselBalance {
   sms_balance: string      // e.g. "2003"
   main_balance: string     // e.g. "GHS 20.99"
 }
+
+/** Arkesel delivery status for a single message */
+export type ArkeselDeliveryStatus = 'sent' | 'delivered' | 'failed' | 'expired' | 'rejected' | 'pending'
 
 const ARKESEL_BASE = 'https://sms.arkesel.com/api/v2'
 
@@ -41,7 +45,9 @@ export async function sendSms(phone: string, message: string): Promise<SmsResult
     })
     const data = await res.json()
     const success = res.ok && data.status === 'success'
-    return { success, providerResponse: JSON.stringify(data) }
+    // Extract the message ID from the first recipient in the response
+    const messageId = success && Array.isArray(data.data) ? data.data[0]?.id : undefined
+    return { success, providerResponse: JSON.stringify(data), messageId }
   } catch (err) {
     return { success: false, providerResponse: String(err) }
   }
@@ -50,7 +56,7 @@ export async function sendSms(phone: string, message: string): Promise<SmsResult
 /** Send to multiple recipients in a single Arkesel API call (up to 100 at a time). */
 export async function sendSmsBatch(
   recipients: Array<{ phone: string; message: string }>
-): Promise<{ phone: string; success: boolean }[]> {
+): Promise<{ phone: string; success: boolean; messageId?: string }[]> {
   if (!isConfigured()) {
     for (const r of recipients) {
       console.log(`[SMS STUB] To: ${r.phone} | Message: ${r.message}`)
@@ -58,7 +64,7 @@ export async function sendSmsBatch(
     return recipients.map((r) => ({ phone: r.phone, success: true }))
   }
 
-  const results: { phone: string; success: boolean }[] = []
+  const results: { phone: string; success: boolean; messageId?: string }[] = []
 
   // Group by identical message to reduce API calls
   const byMessage = new Map<string, string[]>()
@@ -88,7 +94,16 @@ export async function sendSmsBatch(
         })
         const data = await res.json()
         const success = res.ok && data.status === 'success'
-        for (const phone of chunk) results.push({ phone, success })
+        // Map phone → message ID from Arkesel's per-recipient response
+        const idMap = new Map<string, string>()
+        if (success && Array.isArray(data.data)) {
+          for (const item of data.data) {
+            if (item.recipient && item.id) idMap.set(item.recipient, item.id)
+          }
+        }
+        for (const phone of chunk) {
+          results.push({ phone, success, messageId: idMap.get(phone) })
+        }
       } catch {
         for (const phone of chunk) results.push({ phone, success: false })
       }
@@ -96,6 +111,34 @@ export async function sendSmsBatch(
   }
 
   return results
+}
+
+/**
+ * Check delivery status of one or more Arkesel message IDs.
+ * Returns a map of messageId → ArkeselDeliveryStatus.
+ */
+export async function checkSmsDeliveryStatus(
+  messageIds: string[]
+): Promise<Map<string, ArkeselDeliveryStatus>> {
+  const statusMap = new Map<string, ArkeselDeliveryStatus>()
+  if (!isConfigured() || messageIds.length === 0) return statusMap
+
+  for (const id of messageIds) {
+    try {
+      const res = await fetch(`${ARKESEL_BASE}/sms/status?id=${encodeURIComponent(id)}`, {
+        headers: { 'api-key': process.env.ARKESEL_API_KEY! },
+      })
+      const data = await res.json()
+      if (res.ok && data.status === 'success' && data.data?.status) {
+        statusMap.set(id, data.data.status as ArkeselDeliveryStatus)
+      } else {
+        statusMap.set(id, 'pending')
+      }
+    } catch {
+      statusMap.set(id, 'pending')
+    }
+  }
+  return statusMap
 }
 
 /** Fetches the platform's Arkesel account balance (sms_balance + main_balance). */

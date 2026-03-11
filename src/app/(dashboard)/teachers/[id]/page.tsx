@@ -22,6 +22,7 @@ const teacherSchema = z.object({
   date_of_birth:   z.string().optional(),
   notes:           z.string().optional(),
   class_id:        z.string().optional(),
+  staff_role:      z.string().optional(),
 })
 type TeacherForm = z.infer<typeof teacherSchema>
 
@@ -36,7 +37,7 @@ type TeacherDetail = {
   is_active: boolean; user_id: string | null; class_id: string | null
   temp_password: string | null; notes: string | null; created_at: string
   date_of_birth: string | null; photo_url: string | null; year_employed: number | null
-  staff_type: string
+  staff_type: string; staff_role: string | null
 }
 
 export default function TeacherDetailPage() {
@@ -88,6 +89,7 @@ export default function TeacherDetailPage() {
       gender:          (teacher.gender as 'male' | 'female' | 'other' | '') ?? '',
       date_of_birth:   teacher.date_of_birth ?? '',
       notes:           teacher.notes ?? '',
+      staff_role:      teacher.staff_role ?? '',
     })
     setEditModal(true)
   }
@@ -101,9 +103,19 @@ export default function TeacherDetailPage() {
       gender:          values.gender || null,
       date_of_birth:   values.date_of_birth || null,
       notes:           values.notes || null,
+      staff_role:      teacher?.staff_type === 'non_teaching' ? (values.staff_role || null) : null,
     }).eq('id', id)
     if (error) { toast.error(error.message); return }
-    toast.success('Teacher updated')
+    // If email changed and teacher has a login, sync auth.users email too
+    if (teacher?.user_id && values.email && values.email !== teacher.email) {
+      const res = await fetch('/api/teacher-account/update-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: teacher.user_id, email: values.email }),
+      })
+      if (!res.ok) toast.warning('Profile saved but login email could not be updated in auth')
+    }
+    toast.success('Staff updated')
     setEditModal(false)
     load()
   }
@@ -286,6 +298,12 @@ export default function TeacherDetailPage() {
                 )}
               </dd>
             </div>
+            {teacher.staff_type === 'non_teaching' && (
+              <div className="flex justify-between">
+                <dt className="text-gray-500">Role / Position</dt>
+                <dd className="font-medium text-fg capitalize">{teacher.staff_role ?? '—'}</dd>
+              </div>
+            )}
             {teacher.staff_type !== 'non_teaching' && (
               <div className="flex justify-between">
                 <dt className="text-gray-500">Assigned Class</dt>
@@ -368,6 +386,12 @@ export default function TeacherDetailPage() {
             <label className="label">Date of Birth</label>
             <input type="date" className="input" {...register('date_of_birth')} />
           </div>
+          {teacher?.staff_type === 'non_teaching' && (
+            <div>
+              <label className="label">Role / Position</label>
+              <input className="input" placeholder="e.g. Driver, Cook, Cleaner, Security" {...register('staff_role')} />
+            </div>
+          )}
           <div>
             <label className="label">Notes</label>
             <textarea className="input min-h-[80px]" {...register('notes')} />

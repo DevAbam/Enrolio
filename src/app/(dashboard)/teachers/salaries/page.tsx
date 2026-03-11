@@ -97,7 +97,6 @@ export default function TeacherSalariesPage() {
         .reduce((sum, p) => sum + Number(p.amount_paid), 0)
       return {
         ...t,
-        salary_amount: Number(t.salary_amount ?? 0),
         termSalary,
         paidThisPeriod: paid,
         outstandingThisPeriod: Math.max(0, termSalary - paid),
@@ -206,6 +205,10 @@ export default function TeacherSalariesPage() {
           <td colspan="3" style="border:1px solid #ddd;padding:6px 10px;font-weight:bold;background:#f3f4f6;">${formatCurrency(total)}</td>
         </tr></tfoot>
       </table>`
+
+    // Clean up any leftover elements from a previous print
+    document.getElementById('__print-salary__')?.remove()
+    document.getElementById('__print-salary-style__')?.remove()
 
     const style = document.createElement('style')
     style.id = '__print-salary-style__'

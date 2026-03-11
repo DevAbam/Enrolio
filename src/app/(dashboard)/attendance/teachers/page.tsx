@@ -50,6 +50,7 @@ export default function TeacherAttendancePage() {
   // history mode
   const [historyTermId, setHistoryTermId] = useState('')
   const [historyYear, setHistoryYear] = useState('')
+  const [historyDate, setHistoryDate] = useState('')
   const [historyData, setHistoryData] = useState<HistoryRecord[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [summaryMode, setSummaryMode] = useState(false)
@@ -123,14 +124,14 @@ export default function TeacherAttendancePage() {
     }))
     const { error } = await supabase.from('teacher_attendance').upsert(rows, { onConflict: 'teacher_id,attendance_date' })
     if (error) toast.error('Failed to save: ' + error.message)
-    else toast.success(`Attendance saved for ${rows.length} staff member${rows.length !== 1 ? 's' : ''}`)
+    else { toast.success(`Attendance saved for ${rows.length} staff member${rows.length !== 1 ? 's' : ''}`); setIsAlreadyMarked(true) }
     setSaving(false)
   }
 
   function handleExportCSV() {
     if (mode === 'history') {
       if (summaryMode) {
-        const headers = ['Teacher Name', 'Employee No.', 'Present', 'Absent', 'Late', 'Excused', 'Total Days', 'Attendance %']
+        const headers = ['Staff Name', 'Employee No.', 'Present', 'Absent', 'Late', 'Excused', 'Total Days', 'Attendance %']
         const rows = teacherSummary.map(r => [
           r.full_name, r.employee_number ?? '',
           String(r.present), String(r.absent), String(r.late), String(r.excused), String(r.total),
@@ -161,16 +162,22 @@ export default function TeacherAttendancePage() {
   const currentYear = new Date().getFullYear()
   const yearOptions = Array.from({ length: 8 }, (_, i) => currentYear - 3 + i)
 
-  const filteredHistoryData = historyData
+  // Base filter — applied to both Records and Summary tabs
+  const baseFilteredHistoryData = historyData
     .filter(r => r.teachers?.staff_type === staffType)
     .filter(r => !historyTeacherSearch || r.teachers?.full_name?.toLowerCase().includes(historyTeacherSearch.toLowerCase()))
+
+  // Records tab also filters by specific date; Summary shows full totals
+  const filteredHistoryData = historyDate
+    ? baseFilteredHistoryData.filter(r => r.attendance_date === historyDate)
+    : baseFilteredHistoryData
 
   type TSRow = {
     teacher_id: string; full_name: string; employee_number: string | null
     present: number; absent: number; late: number; excused: number; total: number
   }
   const summaryMap = new Map<string, TSRow>()
-  for (const r of filteredHistoryData) {
+  for (const r of baseFilteredHistoryData) {
     if (!summaryMap.has(r.teacher_id)) {
       summaryMap.set(r.teacher_id, {
         teacher_id: r.teacher_id,
@@ -381,6 +388,17 @@ export default function TeacherAttendancePage() {
                   />
                 </div>
               )}
+              {(historyTermId || historyYear) && (
+                <div>
+                  <label className="label text-xs mb-1">Filter by date</label>
+                  <input
+                    type="date"
+                    className="input max-w-[160px]"
+                    value={historyDate}
+                    onChange={e => setHistoryDate(e.target.value)}
+                  />
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <Button variant="ghost" icon={<Printer size={15} />} onClick={() => window.print()}>Print</Button>
@@ -402,7 +420,7 @@ export default function TeacherAttendancePage() {
                 className={cn('px-3 py-1 text-xs rounded font-medium border transition-colors',
                   summaryMode ? 'bg-accent text-white border-accent' : 'border-border text-fg-muted hover:bg-surface-alt')}
               >
-                Teacher Summary
+                Staff Summary
               </button>
             </div>
 

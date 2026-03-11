@@ -50,9 +50,16 @@ export async function POST(req: NextRequest) {
 
   const isSingle  = recipients.length === 1
   const allFailed = successCount === 0
-  const status    = allFailed ? 'failed' : successCount === recipients.length ? 'success' : 'partial'
+  // Use constraint-safe statuses until migration 35 is applied.
+  // After migration 35: 'partial' and 'sent'/'delivered' become available.
+  // 'success' is kept in migration 35's new constraint for backward compat.
+  const status    = allFailed ? 'failed' : 'success'
 
-  // Deduct credits equal to the number actually attempted
+  // Collect Arkesel message IDs for delivery status polling (comma-separated)
+  const msgIds = results.flatMap(r => r.messageId ? [r.messageId] : [])
+  const arkeselMsgIds = msgIds.length > 0 ? msgIds.join(',') : null
+
+  // Deduct credits equal to the number actually dispatched
   if (successCount > 0) {
     await admin.rpc('deduct_sms_credits', {
       p_school_id: me.school_id,
@@ -72,14 +79,15 @@ export async function POST(req: NextRequest) {
   const logType = validTypes.includes(sms_type ?? '') ? sms_type! : (isSingle ? 'general' : 'bulk')
 
   await admin.from('sms_logs').insert({
-    school_id:       me.school_id,
-    student_id:      isSingle ? (recipients[0].student_id ?? null) : null,
-    sent_by:         user.id,
-    parent_phone:    isSingle ? recipients[0].phone : `${recipients.length} recipients`,
-    message:         recipients[0].message,
-    sms_type:        logType,
+    school_id:        me.school_id,
+    student_id:       isSingle ? (recipients[0].student_id ?? null) : null,
+    sent_by:          user.id,
+    parent_phone:     isSingle ? recipients[0].phone : `${recipients.length} recipients`,
+    message:          recipients[0].message,
+    sms_type:         logType,
     status,
-    recipient_count: recipients.length,
+    recipient_count:  recipients.length,
+    arkesel_msg_ids:  arkeselMsgIds,
   })
 
   return NextResponse.json({ results, successCount, failCount })

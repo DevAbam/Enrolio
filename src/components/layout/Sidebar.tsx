@@ -30,7 +30,7 @@ const allNavSections: { label: string; items: NavItem[] }[] = [
   {
     label: 'MAIN',
     items: [
-      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant'], exact: false },
+      { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'accountant', 'teacher'], exact: false },
       { href: '/students', label: 'Students', icon: GraduationCap, roles: ['admin', 'accountant', 'teacher'], exact: false },
       { href: '/teachers', label: 'Staff', icon: Users, roles: ['admin'], exact: true },
       { href: '/classes', label: 'Classes', icon: BookOpen, roles: ['admin', 'accountant'], exact: false },

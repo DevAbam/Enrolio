@@ -25,7 +25,7 @@ interface PaymentWithStudent extends Payment {
   students?: { full_name: string; classes?: { name: string } | null } | null
 }
 
-type StudentOption = { id: string; full_name: string; class_name?: string | null }
+type StudentOption = { id: string; full_name: string; class_name?: string | null; outstanding?: number }
 
 export default function PaymentsPage() {
   const { schoolName, schoolLogoUrl, schoolAddress, schoolPhone, schoolEmail, isAdmin } = useRole()
@@ -103,7 +103,7 @@ export default function PaymentsPage() {
     const timer = setTimeout(async () => {
       const { data } = await supabase
         .from('student_fee_summary')
-        .select('id, full_name, class_name')
+        .select('id, full_name, class_name, outstanding')
         .eq('is_active', true)
         .or(`full_name.ilike.%${studentSearch}%,admission_number.ilike.%${studentSearch}%`)
         .order('full_name')
@@ -242,11 +242,11 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
         <div className="flex gap-2 items-end flex-wrap">
           <div>
             <label className="label text-xs">From</label>
-            <input type="date" className="input max-w-[140px]" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1) }} />
+            <input type="date" className="input max-w-[140px]" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setDateExact(''); setPage(1) }} />
           </div>
           <div>
             <label className="label text-xs">To</label>
-            <input type="date" className="input max-w-[140px]" value={dateTo} max={today()} onChange={(e) => { setDateTo(e.target.value); setPage(1) }} />
+            <input type="date" className="input max-w-[140px]" value={dateTo} max={today()} onChange={(e) => { setDateTo(e.target.value); setDateExact(''); setPage(1) }} />
           </div>
           {allTerms.length > 0 && (
             <div>
@@ -257,8 +257,8 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
               </select>
             </div>
           )}
-          {(dateFrom || termFilter || dateExact) && (
-            <button onClick={() => { setDateFrom(''); setTermFilter(''); setDateExact(''); setPage(1) }} className="btn-ghost flex items-center gap-1 text-sm px-3 py-2">
+          {(dateFrom || termFilter || dateExact || dateTo !== today()) && (
+            <button onClick={() => { setDateFrom(''); setDateTo(today()); setTermFilter(''); setDateExact(''); setPage(1) }} className="btn-ghost flex items-center gap-1 text-sm px-3 py-2">
               <X size={14} /> Clear
             </button>
           )}
@@ -274,7 +274,7 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
             value={dateExact}
             max={today()}
             title="Filter by specific date"
-            onChange={(e) => { setDateExact(e.target.value); setPage(1) }}
+            onChange={(e) => { setDateExact(e.target.value); if (e.target.value) { setDateFrom(''); setDateTo('') } else { setDateTo(today()) } setPage(1) }}
           />
         </div>
         <Table>
@@ -401,7 +401,7 @@ ${results.length === 0 ? '<p style="text-align:center;color:#999;padding:40px">N
               </div>
               <PaymentForm
                 studentId={selectedStudent.id}
-                outstanding={0}
+                outstanding={selectedStudent.outstanding ?? 0}
                 onSuccess={() => {
                   setLastRecorded(selectedStudent.full_name)
                   setRecordedCount(c => c + 1)

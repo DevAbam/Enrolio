@@ -1,7 +1,7 @@
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused'
 export type PaymentMethod    = 'cash' | 'bank_transfer' | 'momo' | 'card' | 'other'
 export type SmsType          = 'fee_reminder' | 'general' | 'bulk' | 'broadcast'
-export type SmsStatus        = 'success' | 'failed' | 'pending'
+export type SmsStatus        = 'sent' | 'delivered' | 'failed' | 'partial' | 'pending' | 'success'
 export type UserRole         = 'admin' | 'accountant' | 'teacher' | 'receptionist'
 
 export interface School {
@@ -22,8 +22,8 @@ export interface Student {
 export interface Teacher {
   id: string; school_id: string; full_name: string; phone?: string
   email?: string; employee_number?: string; gender?: string; is_active: boolean
-  user_id?: string | null; class_id?: string | null; salary_amount: number
-  date_of_birth?: string; photo_url?: string; staff_type?: string
+  user_id?: string | null; class_id?: string | null
+  date_of_birth?: string; photo_url?: string; staff_type?: string; staff_role?: string | null
   created_at: string; updated_at: string
 }
 
@@ -76,7 +76,7 @@ export interface TeacherAttendance {
 export interface SmsLog {
   id: string; school_id: string; student_id?: string; sent_by?: string
   parent_phone: string; message: string; sms_type: SmsType; recipient_count: number
-  status: SmsStatus; provider_response?: string; sent_at: string
+  status: SmsStatus; provider_response?: string; sent_at: string; arkesel_msg_ids?: string | null
 }
 
 export interface SmsCreditTransaction {

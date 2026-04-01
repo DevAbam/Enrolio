@@ -127,10 +127,10 @@ export default function LoginPage() {
           </form>
 
           <p className="mt-4 text-center text-xs text-fg-subtle">
-            First time?{' '}
-            <a href="/setup" className="text-accent hover:underline">
+            Sign In with your provided credentials
+            {/* <a href="/setup" className="text-accent hover:underline">
               Set up your school
-            </a>
+            </a> */}
           </p>
         </div>
 

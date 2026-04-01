@@ -5,6 +5,7 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'SchoolOps Pro',
   description: 'School management platform — students, fees, attendance, and more.',
+  icons: [{ rel: 'icon', type: 'image/png', url: '/icon.png' }],
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

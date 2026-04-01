@@ -14,24 +14,24 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import type { Class } from '@/types'
 
 const studentSchema = z.object({
-  full_name:        z.string().min(1, 'Full name is required'),
+  full_name: z.string().min(1, 'Full name is required'),
   admission_number: z.string().optional(),
-  class_id:         z.string().optional(),
-  date_of_birth:    z.string().optional(),
-  gender:           z.enum(['male', 'female', 'other']).optional().or(z.literal('')),
-  parent_name:      z.string().optional(),
-  parent_phone:     z.string().optional(),
-  parent_email:     z.string().email('Invalid email').optional().or(z.literal('')),
-  discount_amount:  z.coerce.number().min(0).default(0),
+  class_id: z.string().optional(),
+  date_of_birth: z.string().optional(),
+  gender: z.enum(['male', 'female', 'other']).optional().or(z.literal('')),
+  parent_name: z.string().optional(),
+  parent_phone: z.string().optional(),
+  parent_email: z.string().email('Invalid email').optional().or(z.literal('')),
+  discount_amount: z.coerce.number().min(0).default(0),
 })
 
 const schema = z.object({ students: z.array(studentSchema).min(1) })
 type FormData = z.infer<typeof schema>
 
 export default function NewStudentPage() {
-  const [classes,      setClasses]      = useState<Class[]>([])
+  const [classes, setClasses] = useState<Class[]>([])
   const [studentPhotos, setStudentPhotos] = useState<Record<string, string>>({}) // fieldId → url
-  const router   = useRouter()
+  const router = useRouter()
   const supabase = createClient()
 
   useEffect(() => {
@@ -50,17 +50,17 @@ export default function NewStudentPage() {
     const { data: me } = await supabase.from('users').select('school_id').eq('id', user!.id).single()
 
     const rows = values.students.map((s, i) => ({
-      school_id:        me!.school_id,
-      full_name:        s.full_name,
+      school_id: me!.school_id,
+      full_name: s.full_name,
       admission_number: s.admission_number || null,
-      class_id:         s.class_id || null,
-      date_of_birth:    s.date_of_birth || null,
-      gender:           s.gender || null,
-      parent_name:      s.parent_name || null,
-      parent_phone:     s.parent_phone || null,
-      parent_email:     s.parent_email || null,
-      discount_amount:  s.discount_amount,
-      photo_url:        studentPhotos[fields[i].id] || null,
+      class_id: s.class_id || null,
+      date_of_birth: s.date_of_birth || null,
+      gender: s.gender || null,
+      parent_name: s.parent_name || null,
+      parent_phone: s.parent_phone || null,
+      parent_email: s.parent_email || null,
+      discount_amount: s.discount_amount,
+      photo_url: studentPhotos[fields[i].id] || null,
     }))
 
     const { error } = await supabase.from('students').insert(rows)
@@ -181,7 +181,7 @@ export default function NewStudentPage() {
 
           <button
             type="button"
-            onClick={() => append({ discount_amount: 0 })}
+            onClick={() => append({ full_name: '', discount_amount: 0 })}
             className="w-full flex items-center justify-center gap-2 py-3 border-2 border-dashed border-border rounded-lg text-sm text-fg-muted hover:border-accent hover:text-accent transition-colors"
           >
             <Plus size={16} />

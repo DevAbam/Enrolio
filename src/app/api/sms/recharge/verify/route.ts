@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient }      from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(req: NextRequest) {
@@ -45,30 +45,30 @@ export async function GET(req: NextRequest) {
   if (!verifyRes.ok)
     return NextResponse.json({ status: purchase.status, credits: await getCredits() })
 
-  const verifyData  = await verifyRes.json()
-  const pstkStatus  = verifyData?.data?.status as string | undefined
+  const verifyData = await verifyRes.json()
+  const pstkStatus = verifyData?.data?.status as string | undefined
 
   if (pstkStatus === 'success' && purchase.status === 'pending') {
     // Optimistic lock: only credit if we win the race vs. webhook
-    const { count } = await admin
+    const { data: updatedRows } = await admin
       .from('sms_credit_purchases')
       .update({ status: 'success', verified_at: new Date().toISOString() })
       .eq('paystack_reference', reference)
       .eq('status', 'pending')          // guard: skip if webhook already ran
-      .select('id', { count: 'exact', head: true })
+      .select('id')
 
-    if ((count ?? 0) > 0) {
+    if ((updatedRows?.length ?? 0) > 0) {
       // We won the race — add credits
       await admin.rpc('add_sms_credits', {
         p_school_id: me.school_id,
-        p_amount:    purchase.credits_purchased,
+        p_amount: purchase.credits_purchased,
       })
       await admin.from('sms_credit_transactions').insert({
-        school_id:   me.school_id,
-        amount:      purchase.credits_purchased,
-        type:        'recharge',
+        school_id: me.school_id,
+        amount: purchase.credits_purchased,
+        type: 'recharge',
         description: `Paystack recharge: ${purchase.credits_purchased} credits (ref: ${reference})`,
-        created_by:  user.id,
+        created_by: user.id,
       })
     }
     // If count === 0, webhook already added credits — just return balance

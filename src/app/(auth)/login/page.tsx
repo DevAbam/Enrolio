@@ -38,13 +38,18 @@ export default function LoginPage() {
 
     try {
       const supabase = createClient()
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+      const { data: signInData, error: authError } = await supabase.auth.signInWithPassword({ email, password })
+      console.debug('signInWithPassword:', { signInData, authError })
 
       if (authError) {
+        console.error('Supabase signin error', authError)
         setError(friendlyError(authError))
         setLoading(false)
         return
       }
+
+      const { data: currentUser } = await supabase.auth.getUser()
+      console.debug('Supabase current user after sign-in:', currentUser)
 
       router.push('/dashboard')
       router.refresh()

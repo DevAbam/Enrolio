@@ -80,7 +80,7 @@ export function Sidebar({ schoolName, adminName, role, mobileOpen = false, onMob
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-5">
         <span className="font-bold text-accent text-base tracking-tight">
-          SchoolOps Pro
+          Enrolio
         </span>
         {onMobileClose && (
           <button onClick={onMobileClose} className="btn-ghost p-1 md:hidden">

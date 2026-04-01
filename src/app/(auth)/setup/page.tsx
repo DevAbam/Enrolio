@@ -14,11 +14,11 @@ export default function SetupPage() {
     schoolPhone: '',
     schoolEmail: '',
   })
-  const [logoUrl,  setLogoUrl]  = useState<string | null>(null)
-  const [showPw,   setShowPw]   = useState(false)
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
-  const [success,  setSuccess]  = useState(false)
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [showPw, setShowPw] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
   const router = useRouter()
 
   function update(key: string, value: string) {
@@ -205,7 +205,7 @@ export default function SetupPage() {
             <a href="/login" className="text-accent hover:underline">Sign in</a>
           </p>
         </div>
-        <p className="mt-6 text-center text-xs text-fg-subtle">SchoolOps Pro</p>
+        <p className="mt-6 text-center text-xs text-fg-subtle">Enrolio</p>
       </div>
     </div>
   )

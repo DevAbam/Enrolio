@@ -5,11 +5,11 @@ import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
-  const [email,    setEmail]    = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [showPw,   setShowPw]   = useState(false)
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
+  const [showPw, setShowPw] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const router = useRouter()
 
   function friendlyError(err: unknown): string {
@@ -61,10 +61,10 @@ export default function LoginPage() {
           {/* Logo */}
           <div className="flex flex-col items-center mb-8">
             <div className="h-12 w-12 rounded-full bg-accent text-white flex items-center justify-center text-xl font-bold mb-3">
-              S
+              E
             </div>
             <h1 className="text-2xl font-bold text-fg">Welcome back</h1>
-            <p className="text-sm text-fg-muted mt-1">Sign in to SchoolOps Pro</p>
+            <p className="text-sm text-fg-muted mt-1">Sign in to Enrolio</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -134,7 +134,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <p className="mt-6 text-center text-xs text-gray-400">SchoolOps Pro</p>
+        <p className="mt-6 text-center text-xs text-gray-400">Enrolio</p>
       </div>
     </div>
   )

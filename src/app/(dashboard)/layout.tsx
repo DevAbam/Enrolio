@@ -7,25 +7,25 @@ import { RoleProvider, useRole } from '@/contexts/RoleContext'
 import { TermProvider } from '@/lib/term-context'
 
 const pageTitles: Record<string, string> = {
-  '/dashboard':           'Dashboard',
-  '/students':            'Students',
-  '/students/new':        'Add Student',
-  '/teachers':            'Teachers',
-  '/teachers/salaries':   'Teacher Salaries',
-  '/classes':             'Classes',
-  '/terms':               'Terms & Semesters',
-  '/payments':            'Fee Payments',
+  '/dashboard': 'Dashboard',
+  '/students': 'Students',
+  '/students/new': 'Add Student',
+  '/teachers': 'Teachers',
+  '/teachers/salaries': 'Teacher Salaries',
+  '/classes': 'Classes',
+  '/terms': 'Terms & Semesters',
+  '/payments': 'Fee Payments',
   '/attendance/students': 'Student Attendance',
   '/attendance/teachers': 'Teacher Attendance',
-  '/sms':                 'SMS Center',
-  '/settings':            'School Settings',
+  '/sms': 'SMS Center',
+  '/settings': 'School Settings',
 }
 
 function getPageTitle(pathname: string): string {
   if (pageTitles[pathname]) return pageTitles[pathname]
   if (pathname.startsWith('/students/')) return 'Student Detail'
   if (pathname.startsWith('/teachers/') && !pathname.startsWith('/teachers/salaries')) return 'Teacher Detail'
-  return 'SchoolOps Pro'
+  return 'Enrolio'
 }
 
 function getInitials(name?: string | null): string {
@@ -34,7 +34,7 @@ function getInitials(name?: string | null): string {
 }
 
 function DashboardShell({ children }: { children: React.ReactNode }) {
-  const pathname    = usePathname()
+  const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const { fullName, schoolName, role } = useRole()
 
